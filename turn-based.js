@@ -1,5 +1,5 @@
 // ============================================
-// @keenple/shared — Turn-Based Game Shell (v2.0.0-alpha.2)
+// @keenple/shared — Turn-Based Game Shell (v2.0.0-alpha.4)
 //
 // KeenpleShell.createTurnBased(config) 호출 한 번으로:
 //  - 표준 DOM 레이아웃 주입
@@ -140,7 +140,7 @@
       mount.appendChild(group);
     });
 
-    const buttons = el('div', { style: { display: 'flex', gap: '12px', marginTop: '12px' } }, [
+    const buttons = el('div', { style: { display: 'flex', gap: '12px', marginTop: '16px', justifyContent: 'center' } }, [
       el('button', { class: 'keenple-lobby-btn', onclick: () => onConfirm(values), dataKo: '확인', dataEn: 'Confirm' }, '확인'),
       el('button', { class: 'keenple-lobby-back', onclick: onCancel, dataKo: '뒤로', dataEn: 'Back' }, '뒤로'),
     ]);

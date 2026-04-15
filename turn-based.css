@@ -172,17 +172,23 @@ body.keenple-shell {
   margin: 0 0 16px;
   font-size: 18px;
   color: var(--keenple-primary);
+  text-align: center;
+}
+.keenple-opt-group {
+  text-align: center;
 }
 .keenple-opt-group label {
   display: block;
   font-size: 13px;
   margin-bottom: 6px;
   color: rgba(224, 224, 224, 0.8);
+  text-align: center;
 }
 .keenple-opt-row {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
+  justify-content: center;
 }
 .keenple-opt-btn {
   padding: 5px 12px;
