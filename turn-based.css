@@ -1,0 +1,227 @@
+/* ============================================
+ * Keenple Turn-Based Shell — 표준 레이아웃
+ * 현재 3개 게임(체스·알까기·장기) UI를 베이스로.
+ * 게임별 색상은 --keenple-* 변수로 오버라이드 가능.
+ * ============================================ */
+
+:root {
+  --keenple-bg: #0f0f1a;
+  --keenple-fg: #e0e0e0;
+  --keenple-primary: #d4a574;
+  --keenple-accent: rgba(255, 255, 255, 0.06);
+  --keenple-accent-hover: rgba(255, 255, 255, 0.12);
+  --keenple-border: rgba(255, 255, 255, 0.15);
+  --keenple-surrender: #ff6b6b;
+  --keenple-surrender-bg: rgba(255, 80, 80, 0.1);
+  --keenple-surrender-border: rgba(255, 80, 80, 0.3);
+}
+
+/* ── 전역 ──────────────────────────────────── */
+body.keenple-shell {
+  margin: 0;
+  padding: 0;
+  background: var(--keenple-bg);
+  color: var(--keenple-fg);
+  font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+  min-height: 100vh;
+}
+
+/* ── 게임 화면 ─────────────────────────────── */
+.keenple-game-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(100vh - 40px);
+  padding: 20px;
+  position: relative;
+}
+
+.keenple-board-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.keenple-controls {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── 버튼들 ────────────────────────────────── */
+.keenple-ctrl-btn {
+  padding: 6px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  border: 1px solid var(--keenple-border);
+  border-radius: 8px;
+  background: var(--keenple-accent);
+  color: var(--keenple-fg);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  font-family: inherit;
+}
+.keenple-ctrl-btn:hover:not(:disabled) {
+  background: var(--keenple-accent-hover);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+.keenple-ctrl-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.keenple-surrender-btn {
+  padding: 6px 20px;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid var(--keenple-surrender-border);
+  border-radius: 8px;
+  background: var(--keenple-surrender-bg);
+  color: var(--keenple-surrender);
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+  font-family: inherit;
+}
+.keenple-surrender-btn:hover {
+  background: rgba(255, 80, 80, 0.2);
+  border-color: rgba(255, 80, 80, 0.5);
+}
+
+/* ── AI 난이도 선택 ────────────────────────── */
+.keenple-picker-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(100vh - 40px);
+  padding: 20px;
+}
+.keenple-picker-title {
+  font-size: 24px;
+  font-weight: 600;
+  margin-bottom: 24px;
+  color: var(--keenple-fg);
+}
+.keenple-picker-cards {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: 900px;
+  margin-bottom: 20px;
+}
+.keenple-picker-card {
+  background: var(--keenple-accent);
+  border: 1px solid var(--keenple-border);
+  border-radius: 12px;
+  padding: 24px;
+  min-width: 200px;
+  max-width: 250px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+}
+.keenple-picker-card:hover {
+  background: var(--keenple-accent-hover);
+  border-color: var(--keenple-primary);
+  transform: translateY(-2px);
+}
+.keenple-picker-card h2 {
+  margin: 0 0 8px;
+  font-size: 18px;
+  color: var(--keenple-primary);
+}
+.keenple-picker-card p {
+  margin: 0;
+  font-size: 13px;
+  color: rgba(224, 224, 224, 0.75);
+  line-height: 1.5;
+}
+.keenple-back-link {
+  background: transparent;
+  border: none;
+  color: rgba(224, 224, 224, 0.6);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 8px 16px;
+  font-family: inherit;
+}
+.keenple-back-link:hover { color: var(--keenple-fg); }
+
+/* ── 옵션 모달 ─────────────────────────────── */
+.keenple-overlay {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: #1a1a2e;
+  border: 1px solid var(--keenple-border);
+  border-radius: 12px;
+  padding: 28px;
+  min-width: 320px;
+  max-width: 90vw;
+  max-height: 90vh;
+  overflow: auto;
+  z-index: 500;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+}
+.keenple-overlay h2 {
+  margin: 0 0 16px;
+  font-size: 18px;
+  color: var(--keenple-primary);
+}
+.keenple-opt-group label {
+  display: block;
+  font-size: 13px;
+  margin-bottom: 6px;
+  color: rgba(224, 224, 224, 0.8);
+}
+.keenple-opt-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.keenple-opt-btn {
+  padding: 5px 12px;
+  font-size: 12px;
+  border: 1px solid var(--keenple-border);
+  border-radius: 6px;
+  background: var(--keenple-accent);
+  color: var(--keenple-fg);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  font-family: inherit;
+}
+.keenple-opt-btn:hover { background: var(--keenple-accent-hover); }
+.keenple-opt-btn.selected {
+  background: var(--keenple-primary);
+  border-color: var(--keenple-primary);
+  color: #0f0f1a;
+  font-weight: 600;
+}
+.keenple-lobby-btn {
+  padding: 8px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  border-radius: 8px;
+  background: var(--keenple-primary);
+  color: #0f0f1a;
+  cursor: pointer;
+  font-family: inherit;
+}
+.keenple-lobby-btn:hover { filter: brightness(1.1); }
+.keenple-lobby-back {
+  padding: 8px 20px;
+  font-size: 14px;
+  border: 1px solid var(--keenple-border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--keenple-fg);
+  cursor: pointer;
+  font-family: inherit;
+}
+.keenple-lobby-back:hover { background: var(--keenple-accent); }
