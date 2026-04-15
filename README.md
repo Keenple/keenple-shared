@@ -8,33 +8,42 @@ Keenple 게임들이 공유하는 공통 모듈.
 
 ```json
 "dependencies": {
-  "@keenple/shared": "github:Keenple/keenple-shared#v1.0.0"
+  "@keenple/shared": "github:Keenple/keenple-shared#v1.1.0"
 }
 ```
 
 그리고 `npm install`.
 
-## 포함 모듈
+## 파일 구조 (v1.1.0부터 플랫)
 
-### `multiplayer/` — 방 관리 · 재연결 · 관전자 · 항복 · 라이프사이클
+```
+@keenple/shared/
+├── server-mp.js          ← 서버 멀티플레이어 모듈
+├── client-mp.js          ← 클라이언트 멀티플레이어 모듈
+├── back-to-lobby.js      ← "로비로" 버튼 헬퍼 (UMD)
+└── back-to-lobby.css     ← 버튼 스타일
+```
+
+## 사용법
 
 **서버 (Node.js):**
 ```js
 const { createMultiplayerServer } = require('@keenple/shared/server-mp');
 const mp = createMultiplayerServer(io, { minPlayers: 2, roles: ['red', 'blue'] });
+
+// 클라 정적 서빙 (server.js에 추가)
+app.use('/keenple-shared', express.static(
+  path.join(__dirname, 'node_modules', '@keenple', 'shared')
+));
 ```
 
-**클라이언트 (브라우저):** — `node_modules/@keenple/shared/multiplayer/client-mp.js`를 서빙한 뒤 `<script>` 로드:
+**클라이언트 (브라우저):**
 ```html
-<script src="keenple-shared/client-mp.js"></script>
-```
-(server.js에서 `express.static('node_modules/@keenple/shared', ...)` 설정 참고)
-
-### `core/back-to-lobby.js` — 공통 "로비로" 버튼 헬퍼 (UMD)
-
-```html
-<script src="keenple-shared/back-to-lobby.js"></script>
 <link rel="stylesheet" href="keenple-shared/back-to-lobby.css">
+
+<script src="socket.io/socket.io.js"></script>
+<script src="keenple-shared/client-mp.js"></script>
+<script src="keenple-shared/back-to-lobby.js"></script>
 
 <button id="back-to-lobby-btn" class="keenple-back-to-lobby back-to-lobby-fixed"></button>
 ```
@@ -46,30 +55,14 @@ BackToLobby.attach(document.getElementById('back-to-lobby-btn'), {
 });
 ```
 
-### `styles/back-to-lobby.css` — 위 버튼 스타일
-
----
-
-## 게임 서버에서 브라우저로 서빙하는 법
-
-`server.js`에 한 줄 추가:
-
-```js
-const path = require('path');
-app.use('/keenple-shared', express.static(
-  path.join(__dirname, 'node_modules', '@keenple', 'shared')
-));
-```
-
-그러면 클라이언트에서 `keenple-shared/client-mp.js`, `keenple-shared/back-to-lobby.js`로 접근 가능.
-
 ## 버전 관리
 
-- semver 태그 (`v1.0.0`, `v1.1.0`) 로 릴리즈
+- semver 태그 (`v1.1.0`, `v1.2.0`) 로 릴리즈
 - 각 게임은 `package.json`에서 원하는 버전 고정 사용
-- 업데이트: `npm install @keenple/shared@github:Keenple/keenple-shared#v1.1.0`
+- 업데이트: `npm install @keenple/shared@github:Keenple/keenple-shared#v1.2.0`
 
 ## Breaking change 정책
 
 - **1.x.y** 이내에서 backward-compatible만 추가
-- 인자 시그니처 변경·이벤트 이름 변경 등 깨지는 변경은 **2.0.0**으로 메이저 올림
+- 인자 시그니처 변경·이벤트 이름 변경·**파일 경로 재구성** 등은 메이저(2.0.0) 올림
+- v1.0.0 → v1.1.0: 파일을 루트로 플랫화 (기존 서브폴더 경로 깨짐). 원칙상 메이저지만 사용처가 4곳뿐이라 마이너로 처리하고 소비자 측을 동시 업데이트.
