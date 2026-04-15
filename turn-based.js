@@ -1,5 +1,5 @@
 // ============================================
-// @keenple/shared — Turn-Based Game Shell (v2.0.0-alpha.11)
+// @keenple/shared — Turn-Based Game Shell (v2.0.0-alpha.12)
 //
 // KeenpleShell.createTurnBased(config) 호출 한 번으로:
 //  - 표준 DOM 레이아웃 주입
@@ -160,6 +160,43 @@
   // ============================================
   //  Fail-safe error display
   // ============================================
+  // ============================================
+  //  HUD 높이 자동 측정 → CSS var --keenple-hud-offset
+  // ============================================
+  function measureHudOffset() {
+    let maxBottom = 0;
+    document.querySelectorAll('body > *').forEach(el => {
+      const s = getComputedStyle(el);
+      if (s.position === 'fixed' && s.display !== 'none') {
+        const top = parseFloat(s.top);
+        if (!isNaN(top) && top < 100) {  // 상단에 붙은 fixed 요소만
+          const rect = el.getBoundingClientRect();
+          if (rect.bottom > maxBottom) maxBottom = rect.bottom;
+        }
+      }
+    });
+    return Math.ceil(maxBottom);
+  }
+  function updateHudOffsetVar() {
+    const h = measureHudOffset();
+    if (h > 0) document.documentElement.style.setProperty('--keenple-hud-offset', h + 'px');
+  }
+  // 초기 + 리사이즈 + DOM 변화 시 재측정
+  if (typeof window !== 'undefined') {
+    if (document.readyState === 'complete' || document.readyState === 'interactive') {
+      setTimeout(updateHudOffsetVar, 0);
+      setTimeout(updateHudOffsetVar, 200);  // SDK TopBar/Hud 생성 후
+      setTimeout(updateHudOffsetVar, 800);
+    } else {
+      window.addEventListener('DOMContentLoaded', () => {
+        setTimeout(updateHudOffsetVar, 0);
+        setTimeout(updateHudOffsetVar, 200);
+        setTimeout(updateHudOffsetVar, 800);
+      });
+    }
+    window.addEventListener('resize', updateHudOffsetVar);
+  }
+
   function showShellError(label, err) {
     console.error('[KeenpleShell] ' + label, err);
     let box = document.getElementById('keenple-shell-error');

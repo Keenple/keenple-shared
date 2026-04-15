@@ -33,10 +33,9 @@ body.keenple-shell {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  /* 상단 HUD(TopBar+MatchHud) 영역만큼 위를 비워두고, 나머지 공간에
-     정확히 수직 중앙. margin-top으로 HUD 공간을 배제. */
-  height: calc(100vh - 90px);
-  margin-top: 90px;
+  /* HUD 높이는 JS가 런타임에 측정해 --keenple-hud-offset 주입 (fallback 90px). */
+  height: calc(100vh - var(--keenple-hud-offset, 90px));
+  margin-top: var(--keenple-hud-offset, 90px);
   padding: 0 20px;
   box-sizing: border-box;
   position: relative;
@@ -102,8 +101,8 @@ body.keenple-shell {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: calc(100vh - 90px);
-  margin-top: 90px;
+  height: calc(100vh - var(--keenple-hud-offset, 90px));
+  margin-top: var(--keenple-hud-offset, 90px);
   padding: 0 20px;
   box-sizing: border-box;
 }
