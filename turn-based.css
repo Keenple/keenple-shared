@@ -33,9 +33,9 @@ body.keenple-shell {
   align-items: center;
   justify-content: center;
   min-height: 100vh;
-  /* 상단 TopBar(40px) + MatchHud(~80px) 공간 확보해서 콘텐츠가
-     HUD 뒤로 들어가지 않고 남은 영역에 수직 중앙 정렬되도록. */
-  padding: 120px 20px 40px;
+  /* 상단 TopBar(40) + MatchHud(~80) = ~120px. 완벽한 시각적 중앙정렬
+     조건: padding-top − padding-bottom = HUD높이. 그래서 140/20. */
+  padding: 140px 20px 20px;
   box-sizing: border-box;
   position: relative;
 }
@@ -101,7 +101,7 @@ body.keenple-shell {
   align-items: center;
   justify-content: center;
   min-height: 100vh;
-  padding: 80px 20px 40px;
+  padding: 140px 20px 20px;
   box-sizing: border-box;
 }
 .keenple-picker-title {
