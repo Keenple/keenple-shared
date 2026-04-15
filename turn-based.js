@@ -1,5 +1,5 @@
 // ============================================
-// @keenple/shared — Turn-Based Game Shell (v2.0.0-alpha.7)
+// @keenple/shared — Turn-Based Game Shell (v2.0.0-alpha.8)
 //
 // KeenpleShell.createTurnBased(config) 호출 한 번으로:
 //  - 표준 DOM 레이아웃 주입
