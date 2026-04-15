@@ -225,3 +225,56 @@ body.keenple-shell {
   font-family: inherit;
 }
 .keenple-lobby-back:hover { background: var(--keenple-accent); }
+
+/* ── Game notice (연결 끊김 등 안내) ────── */
+.keenple-game-notice {
+  margin: 12px 0;
+  padding: 8px 16px;
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.25);
+  border-radius: 8px;
+  color: #fbbf24;
+  font-size: 13px;
+  text-align: center;
+}
+
+/* ── 연결 끊김 오버레이 ────────────────── */
+.keenple-disconnect-overlay {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(15, 15, 26, 0.95);
+  border: 1px solid rgba(255, 107, 107, 0.3);
+  border-radius: 12px;
+  padding: 32px 48px;
+  text-align: center;
+  z-index: 400;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.7);
+}
+.keenple-disconnect-overlay h2 {
+  margin: 0 0 8px;
+  color: #ff6b6b;
+  font-size: 18px;
+}
+.keenple-disconnect-overlay p {
+  margin: 0;
+  color: rgba(224, 224, 224, 0.7);
+  font-size: 14px;
+}
+
+/* ── 관전자 배너 ───────────────────────── */
+.keenple-spectator-banner {
+  position: fixed;
+  top: 52px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 16px;
+  background: rgba(99, 102, 241, 0.15);
+  border: 1px solid rgba(99, 102, 241, 0.4);
+  border-radius: 999px;
+  color: #a5b4fc;
+  font-size: 12px;
+  font-weight: 600;
+  z-index: 100;
+}

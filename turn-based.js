@@ -1,19 +1,21 @@
 // ============================================
-// @keenple/shared — Turn-Based Game Shell (v2.0)
+// @keenple/shared — Turn-Based Game Shell (v2.0.0-alpha.2)
 //
 // KeenpleShell.createTurnBased(config) 호출 한 번으로:
 //  - 표준 DOM 레이아웃 주입
-//  - Keenple.UI.Lobby · TopBar · MatchHud 자동 구성
+//  - Keenple.UI.Lobby · TopBar · MatchHud 자동 구성 (ELO 포함)
 //  - AI/로컬/MP 모드 버튼 + 옵션 모달
-//  - Surrender · Undo · BackToLobby · Timer · SpectatorBanner · DisconnectOverlay
+//  - Surrender · Undo · BackToLobby · Timer · DisconnectOverlay
 //  - 게임 루프 (validateMove → applyMove → broadcast → isTerminal)
-//  - GameOverModal + Rematch
+//  - GameOverModal + Rematch + ELO 업데이트
+//  - Spectator late-join · Reconnection 자동 처리
+//  - roomList broadcast → 로비 목록 동기화
 //
 // 게임이 제공해야 하는 것:
 //  - module (createInitialState/validateMove/applyMove/isTerminal)
 //  - board.mount/render/handleInput
 //  - (선택) modes.ai.onOpponentTurn
-//  - (선택) hooks (onBeforeGameStart, gameOverExtras, customOverlays)
+//  - (선택) hooks (onBeforeGameStart, gameOverExtras, customOverlays, onModeStart)
 //
 // 사전 요구: Keenple SDK, socket.io, client-mp.js, back-to-lobby.js 가 이미 로드돼 있어야 함.
 // ============================================
@@ -53,12 +55,13 @@
     if (!gameArea) {
       gameArea = el('div', { id: 'keenple-game-area', class: 'keenple-game-area', style: { display: 'none' } }, [
         el('button', { id: 'keenple-back-to-lobby-btn', class: 'keenple-back-to-lobby back-to-lobby-fixed' }),
+        el('div', { id: 'keenple-game-notice', class: 'keenple-game-notice', style: { display: 'none' } }),
         el('div', { id: 'keenple-board-container', class: 'keenple-board-container' }),
         el('div', { id: 'keenple-controls', class: 'keenple-controls' }, [
           el('button', { id: 'keenple-undo-btn', class: 'keenple-ctrl-btn', style: { display: 'none' }, dataKo: '되돌리기', dataEn: 'Undo' }, '되돌리기'),
           el('button', { id: 'keenple-surrender-btn', class: 'keenple-surrender-btn', style: { display: 'none' }, dataKo: '항복', dataEn: 'Surrender' }, '항복'),
         ]),
-        el('div', { id: 'keenple-overlays' }),  // customOverlays 슬롯
+        el('div', { id: 'keenple-overlays' }),
       ]);
       document.body.appendChild(gameArea);
     }
@@ -72,11 +75,24 @@
       roomOptions = el('div', { id: 'keenple-room-options', class: 'keenple-overlay', style: { display: 'none' } });
       document.body.appendChild(roomOptions);
     }
-    return { gameArea, aiPicker, roomOptions };
+    let disconnectOverlay = document.getElementById('keenple-disconnect-overlay');
+    if (!disconnectOverlay) {
+      disconnectOverlay = el('div', { id: 'keenple-disconnect-overlay', class: 'keenple-disconnect-overlay', style: { display: 'none' } }, [
+        el('h2', { dataKo: '상대방 연결 끊김', dataEn: 'Opponent Disconnected' }, '상대방 연결 끊김'),
+        el('p', { dataKo: '재연결 대기 중...', dataEn: 'Waiting for reconnect...' }, '재연결 대기 중...'),
+      ]);
+      document.body.appendChild(disconnectOverlay);
+    }
+    let spectatorBanner = document.getElementById('keenple-spectator-banner');
+    if (!spectatorBanner) {
+      spectatorBanner = el('div', { id: 'keenple-spectator-banner', class: 'keenple-spectator-banner', style: { display: 'none' }, dataKo: '관전 모드', dataEn: 'Spectator Mode' }, '관전 모드');
+      document.body.appendChild(spectatorBanner);
+    }
+    return { gameArea, aiPicker, roomOptions, disconnectOverlay, spectatorBanner };
   }
 
   // ============================================
-  //  AI Picker Modal
+  //  AI Picker / Room Options Modals
   // ============================================
   function renderAiPicker(mount, difficulties, onPick, onBack) {
     mount.innerHTML = '';
@@ -93,9 +109,6 @@
     mount.appendChild(el('button', { class: 'keenple-back-link', onclick: onBack, dataKo: '← 뒤로', dataEn: '← Back' }, '← 뒤로'));
   }
 
-  // ============================================
-  //  Room Options Modal (방 만들기 옵션)
-  // ============================================
   function renderRoomOptions(mount, options, currentMode, onConfirm, onCancel) {
     mount.innerHTML = '';
     mount.appendChild(el('h2', { dataKo: '방 옵션', dataEn: 'Room Options' }, '방 옵션'));
@@ -134,9 +147,6 @@
     mount.appendChild(buttons);
   }
 
-  // ============================================
-  //  Undo Stack (shell-managed)
-  // ============================================
   function createUndoStack(maxSize) {
     const stack = [];
     return {
@@ -168,10 +178,18 @@
     let mode = null;             // 'ai' | 'local' | 'mp' | 'spectator'
     let gameOver = false;
     let aiDifficulty = null;
-    let mp = null;               // GameClient (MP에서만)
+    let mp = null;
     let myRole = null;
     let currentTurn = null;
-    let gameOverState = null;    // { winner, reason }
+    let gameOverState = null;
+    let activeOverModal = null;
+    let lastEndData = null;
+    let pendingEloUpdate = null;
+    let matchEloInfo = null;
+    let hud = null;
+    let turnDeadline = 0;
+    let timerInterval = null;
+    let activeMatch = null;
     const undoStack = createUndoStack(undoMax);
 
     // ── DOM 주입 ─────────────────────────────
@@ -179,13 +197,16 @@
     const boardContainer = document.getElementById('keenple-board-container');
     const undoBtn = document.getElementById('keenple-undo-btn');
     const surrenderBtn = document.getElementById('keenple-surrender-btn');
+    const gameNotice = document.getElementById('keenple-game-notice');
+    const disconnectOverlay = dom.disconnectOverlay;
+    const spectatorBanner = dom.spectatorBanner;
 
     // ── SDK — TopBar + Lobby ─────────────────
     let lobbyApi = null;
     if (Keenple.UI && Keenple.UI.setTheme) Keenple.UI.setTheme({});
     if (Keenple.UI && Keenple.UI.TopBar) Keenple.UI.TopBar({ gameName: GAME_NAME });
 
-    // ── API 객체 (board 콜백으로 전달) ────────
+    // ── API 객체 ─────────────────────────────
     const api = {
       t: t,
       getState: () => state,
@@ -198,11 +219,23 @@
       showConfirm: (msg) => window.confirm(typeof msg === 'string' ? msg : (msg.ko || msg.en)),
       showOverlay: (id) => {
         const o = document.getElementById('keenple-overlay-' + id);
-        if (o) o.style.display = '';
+        if (!o) return;
+        // render-on-show: customOverlays 훅의 render를 매번 호출
+        if (hooks.customOverlays && hooks.customOverlays[id] && hooks.customOverlays[id].render) {
+          o.innerHTML = '';
+          const content = hooks.customOverlays[id].render(state, api);
+          if (content) o.appendChild(content);
+        }
+        o.style.display = '';
       },
       hideOverlay: (id) => {
         const o = document.getElementById('keenple-overlay-' + id);
         if (o) o.style.display = 'none';
+      },
+      setGameNotice: (msg) => {
+        if (!msg) { gameNotice.style.display = 'none'; return; }
+        gameNotice.textContent = typeof msg === 'string' ? msg : (msg[Keenple.getLang && Keenple.getLang()] || msg.ko || msg.en);
+        gameNotice.style.display = '';
       },
     };
 
@@ -210,11 +243,59 @@
     if (hooks.customOverlays) {
       const overlayRoot = document.getElementById('keenple-overlays');
       Object.keys(hooks.customOverlays).forEach(id => {
-        const o = el('div', { id: 'keenple-overlay-' + id, class: 'keenple-overlay', style: { display: 'none' } });
-        const spec = hooks.customOverlays[id];
-        if (spec.render) o.appendChild(spec.render(state, api));
-        overlayRoot.appendChild(o);
+        overlayRoot.appendChild(el('div', { id: 'keenple-overlay-' + id, class: 'keenple-overlay', style: { display: 'none' } }));
       });
+    }
+
+    // ── Timer ──────────────────────────────────
+    function startTimerDisplay(seconds) {
+      turnDeadline = Date.now() + (seconds || 60) * 1000;
+      stopTimerDisplay();
+      updateTimerDisplay();
+      timerInterval = setInterval(updateTimerDisplay, 250);
+    }
+    function stopTimerDisplay() {
+      if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+    }
+    function updateTimerDisplay() {
+      const remaining = Math.max(0, Math.ceil((turnDeadline - Date.now()) / 1000));
+      if (hud && hud.setTimer) hud.setTimer(remaining);
+      if (remaining <= 0) stopTimerDisplay();
+    }
+
+    // ── HUD 초기화/업데이트 ─────────────────
+    function ensureHud(data) {
+      if (hud) return;
+      const players = (data && data.players) || [];
+      const rolesDef = (modes.mp && modes.mp.roles) || ['white', 'black'];
+      const hudPlayers = rolesDef.map(role => {
+        const p = players.find(pp => pp.role === role) || {};
+        const isMe = mode === 'mp' && myRole === role;
+        let elo = null;
+        if (matchEloInfo) {
+          if (isMe) elo = matchEloInfo.myElo;
+          else if (matchEloInfo.opponent) elo = matchEloInfo.opponent.elo;
+        }
+        return {
+          role,
+          nickname: p.nickname || role,
+          color: (config.hudColors && config.hudColors[role]) || '#e0e0e0',
+          isMe, elo,
+        };
+      });
+      if (Keenple.UI && Keenple.UI.MatchHud) {
+        hud = Keenple.UI.MatchHud({
+          players: hudPlayers,
+          currentTurn: currentTurn || rolesDef[0],
+        });
+      }
+    }
+    function updateHudTurn() {
+      if (hud && hud.setTurn && currentTurn) hud.setTurn(currentTurn);
+    }
+    function destroyHud() {
+      if (hud && hud.destroy) hud.destroy();
+      hud = null;
     }
 
     // ── 게임 시작 / 전환 ─────────────────────
@@ -225,15 +306,23 @@
       gameOverState = null;
       undoStack.clear();
 
-      // 초기 state
-      state = MOD.createInitialState(extras);
+      if (extras.gameState) {
+        state = MOD.deserialize ? MOD.deserialize(extras.gameState) : extras.gameState;
+      } else {
+        state = MOD.createInitialState(extras);
+      }
 
-      // onBeforeGameStart 훅 — 추가 설정 수집 (예: 장기 상차림)
-      if (hooks.onBeforeGameStart) {
+      // onBeforeGameStart 훅
+      if (hooks.onBeforeGameStart && !extras.fromServer) {
         try {
           const extra = await hooks.onBeforeGameStart({ mode, role: myRole, ...extras }, api);
           if (extra) state = MOD.createInitialState(Object.assign({}, extras, extra));
         } catch (e) { console.error('[shell] onBeforeGameStart 실패', e); return; }
+      }
+
+      // onModeStart 훅 (게임에 모드+extras 알림)
+      if (hooks.onModeStart) {
+        try { hooks.onModeStart(mode, extras, api); } catch (e) { console.error('[shell] onModeStart', e); }
       }
 
       // UI 전환
@@ -247,6 +336,9 @@
       undoBtn.style.display = (mode === 'ai' || mode === 'local') ? '' : 'none';
       undoBtn.disabled = true;
 
+      // 관전자 배너
+      spectatorBanner.style.display = (mode === 'spectator') ? '' : 'none';
+
       // 보드 mount
       boardContainer.innerHTML = '';
       if (config.board.mount) config.board.mount(boardContainer, api);
@@ -254,10 +346,14 @@
 
       currentTurn = state.currentTurn || (state.turn != null ? state.turn : null);
 
-      // AI 모드인데 AI 먼저 둘 차례면 즉시 호출
+      // HUD 생성/업데이트
+      ensureHud(extras);
+      updateHudTurn();
+
+      // AI 모드 선공 체크
       if (mode === 'ai' && modes.ai && modes.ai.onOpponentTurn) {
-        const aiSide = extras.aiSide || 'black';
-        if (currentTurn === aiSide) triggerAiMove();
+        const aiSide = extras.aiSide || state.aiSide || 'black';
+        if (currentTurn === aiSide) setTimeout(triggerAiMove, 200);
       }
     }
 
@@ -274,11 +370,11 @@
       state = MOD.applyMove(state, move);
       currentTurn = state.currentTurn || state.turn;
       if (config.board.render) config.board.render(state, api);
+      updateHudTurn();
 
       const term = MOD.isTerminal(state);
       if (term.terminal) { handleGameOver(term); return true; }
 
-      // AI 차례면 trigger
       if (mode === 'ai' && modes.ai && modes.ai.onOpponentTurn) {
         const aiSide = state.aiSide || 'black';
         if (currentTurn === aiSide) setTimeout(triggerAiMove, 300);
@@ -301,6 +397,7 @@
       state = MOD.deserialize ? MOD.deserialize(prev) : prev;
       currentTurn = state.currentTurn || state.turn;
       if (config.board.render) config.board.render(state, api);
+      updateHudTurn();
       if (!undoStack.size()) undoBtn.disabled = true;
     });
 
@@ -312,39 +409,87 @@
     });
 
     // ── Game Over ─────────────────────────────
-    function handleGameOver(result) {
-      gameOver = true;
-      gameOverState = result;
+    function computeGameOverCfg(result) {
       const isMe = (mode === 'mp' && myRole) ? (result.winner === myRole) : null;
+      const extra = result || {};
+      const rolesDef = (modes.mp && modes.mp.roles) || ['white', 'black'];
+      let title = { ko: '게임 종료', en: 'Game Over' };
+      let resultStr = 'info';
+
+      if (mode === 'mp') {
+        if (extra.reason === 'disconnect') {
+          resultStr = isMe ? 'win' : 'lose';
+          title = isMe ? { ko: '상대 연결 끊김 — 승리!', en: 'Opponent disconnected — Victory!' } : { ko: '연결 끊김 — 패배', en: 'Disconnected — Defeat' };
+        } else if (extra.reason === 'surrender') {
+          if (extra.surrenderedBy === myRole) { resultStr = 'lose'; title = { ko: '항복', en: 'Surrendered' }; }
+          else { resultStr = 'win'; title = { ko: '상대 항복 — 승리!', en: 'Opponent surrendered — Victory!' }; }
+        } else if (extra.reason === 'timeout') {
+          if (extra.timedOutRole === myRole) { resultStr = 'lose'; title = { ko: '시간 초과 — 패배', en: 'Time out — Defeat' }; }
+          else { resultStr = 'win'; title = { ko: '상대 시간 초과 — 승리!', en: 'Opponent timed out — Victory!' }; }
+        } else {
+          resultStr = isMe ? 'win' : (extra.winner ? 'lose' : 'draw');
+          if (extra.winner) title = resultStr === 'win' ? { ko: '승리!', en: 'Victory!' } : { ko: '패배', en: 'Defeat' };
+          else title = { ko: '무승부', en: 'Draw' };
+        }
+      } else {
+        if (extra.winner) {
+          const winnerLabel = rolesDef.indexOf(extra.winner) === 0 ? { ko: '선공', en: 'First' } : { ko: '후공', en: 'Second' };
+          title = { ko: winnerLabel.ko + ' 승리', en: winnerLabel.en + ' wins' };
+        } else {
+          title = { ko: '무승부', en: 'Draw' };
+        }
+      }
+
       const cfg = {
-        title: result.winner
-          ? t(result.winner + ' 승리', (result.winner.charAt(0).toUpperCase() + result.winner.slice(1)) + ' wins')
-          : t('무승부', 'Draw'),
-        message: result.reason ? t(result.reason, result.reason) : '',
-        result: (mode !== 'mp') ? 'info' : (isMe === true ? 'win' : isMe === false ? 'lose' : 'info'),
+        title, result: resultStr,
         leave: { label: { ko: '나가기', en: 'Leave' }, onClick: () => backToLobby() },
       };
-      if (mode === 'mp' && mp) cfg.rematch = { enabled: true, mp: mp, event: 'rematch' };
+      const canRematch = mode === 'mp' && extra.reason !== 'disconnect';
+      if (canRematch && mp) cfg.rematch = { enabled: true, mp: mp, event: 'rematch' };
+      if (pendingEloUpdate) cfg.elo = pendingEloUpdate;
       if (hooks.gameOverExtras) {
         const extras = hooks.gameOverExtras(result, api);
         if (extras) cfg.extraContent = extras;
       }
-      if (Keenple.UI && Keenple.UI.GameOverModal) Keenple.UI.GameOverModal(cfg);
+      return cfg;
+    }
+
+    function handleGameOver(result) {
+      gameOver = true;
+      gameOverState = result;
+      lastEndData = result;
+      surrenderBtn.style.display = 'none';
+      undoBtn.style.display = 'none';
+      stopTimerDisplay();
+      if (hud && hud.setTimer) hud.setTimer(null);
+      if (activeOverModal && activeOverModal.close) { activeOverModal.close(); activeOverModal = null; }
+      const cfg = computeGameOverCfg(result);
+      if (Keenple.UI && Keenple.UI.GameOverModal) {
+        activeOverModal = Keenple.UI.GameOverModal(cfg);
+      }
+      pendingEloUpdate = null;
     }
 
     // ── Back to Lobby ─────────────────────────
     function backToLobby() {
       try { if (mode === 'mp' && mp && !gameOver) mp.surrender(); } catch (e) {}
+      if (activeOverModal && activeOverModal.close) { activeOverModal.close(); activeOverModal = null; }
       if (mp) { mp.clearSession && mp.clearSession(); mp.disconnect && mp.disconnect(); mp = null; }
+      if (activeMatch && activeMatch.cancel) { activeMatch.cancel(); activeMatch = null; }
+      destroyHud();
+      stopTimerDisplay();
       mode = null; myRole = null; gameOver = false; state = null;
+      matchEloInfo = null; pendingEloUpdate = null;
       undoStack.clear();
       dom.gameArea.style.display = 'none';
+      spectatorBanner.style.display = 'none';
+      disconnectOverlay.style.display = 'none';
+      gameNotice.style.display = 'none';
       document.getElementById('keenple-ai-picker').style.display = 'none';
       document.getElementById('keenple-room-options').style.display = 'none';
       if (lobbyApi) { lobbyApi.show(); lobbyApi.setStatus && lobbyApi.setStatus(''); lobbyApi.showCancel && lobbyApi.showCancel(false); }
     }
 
-    // BackToLobby 버튼 (공용 헬퍼)
     if (typeof BackToLobby !== 'undefined') {
       BackToLobby.attach(document.getElementById('keenple-back-to-lobby-btn'), {
         isInProgress: () => !!mode && !gameOver,
@@ -357,35 +502,129 @@
       if (mp) return mp;
       mp = new GameClient({ gamePath: GAME_KEY });
       mp.connect();
-      mp.on('roomCreated', (data) => { myRole = data.role; });
+
+      mp.on('connectionError', (data) => {
+        lobbyApi && lobbyApi.setStatus && lobbyApi.setStatus({ ko: '서버 연결 실패', en: 'Server connection failed' });
+      });
+
+      mp.on('roomCreated', (data) => {
+        myRole = data.role;
+        lobbyApi && lobbyApi.setStatus && lobbyApi.setStatus({
+          ko: '방 코드: ' + data.roomCode + ' — 상대를 기다리는 중...',
+          en: 'Room Code: ' + data.roomCode + ' — Waiting for opponent...'
+        });
+        lobbyApi && lobbyApi.showCancel && lobbyApi.showCancel(true);
+      });
+
       mp.on('roomJoined', (data) => {
         myRole = data.role;
-        if (data.gameStarted && data.gameState) {
-          // 관전자 또는 재접속
-          state = MOD.deserialize ? MOD.deserialize(data.gameState) : data.gameState;
-          mode = data.isSpectator ? 'spectator' : 'mp';
-          currentTurn = state.currentTurn || state.turn;
-          if (lobbyApi) lobbyApi.hide();
-          dom.gameArea.style.display = '';
-          if (config.board.mount) { boardContainer.innerHTML = ''; config.board.mount(boardContainer, api); }
-          if (config.board.render) config.board.render(state, api);
-          surrenderBtn.style.display = (mode === 'mp') ? '' : 'none';
+        // 관전자 late-join
+        if (data.role === 'spectator' && data.gameStarted) {
+          myRole = null;
+          mode = 'spectator';
+          const gs = data.gameState || {};
+          startGame('spectator', { fromServer: true, gameState: gs, players: data.players });
+          return;
         }
+        // 재연결
+        if (data.reconnected && data.gameStarted) {
+          lobbyApi && lobbyApi.setStatus && lobbyApi.setStatus({ ko: '재연결됨!', en: 'Reconnected!' });
+          const gs = data.gameState || {};
+          startGame('mp', { fromServer: true, gameState: gs, players: data.players, reconnected: true });
+          if (gs.turnDeadline) {
+            const remainMs = gs.turnDeadline - Date.now();
+            if (remainMs > 0) startTimerDisplay(remainMs / 1000);
+          }
+          return;
+        }
+        lobbyApi && lobbyApi.setStatus && lobbyApi.setStatus({ ko: '입장 완료! 대기 중...', en: 'Joined! Waiting...' });
       });
+
+      mp.on('playerJoined', () => {
+        lobbyApi && lobbyApi.setStatus && lobbyApi.setStatus({ ko: '상대 입장! 곧 시작합니다...', en: 'Opponent joined! Starting soon...' });
+      });
+
+      mp.on('readyToStart', () => {
+        if (mp.role === (modes.mp && modes.mp.roles && modes.mp.roles[0])) mp.startGame();
+      });
+
       mp.on('gameStart', (data) => {
         myRole = data.yourRole || myRole;
-        state = MOD.deserialize ? MOD.deserialize(data.gameState) : data.gameState;
-        mode = 'mp';
-        startGame('mp', { fromServer: true, gameState: state });
+        if (mp) mp.role = data.yourRole;
+        lobbyApi && lobbyApi.showCancel && lobbyApi.showCancel(false);
+        startGame('mp', { fromServer: true, gameState: data.gameState, players: data.players });
+        // MP 기본 타이머 (옵션에 turnTimer 있으면 그 값, 없으면 skip — 서버의 turnTimer 이벤트 기다림)
       });
+
       mp.on('gameOver', (data) => handleGameOver(data));
+
+      mp.on('playerDisconnected', (data) => {
+        disconnectOverlay.style.display = '';
+        api.setGameNotice({ ko: '상대 연결 끊김... 재연결 대기 중', en: 'Opponent disconnected... waiting' });
+      });
+      mp.on('playerReconnected', () => {
+        disconnectOverlay.style.display = 'none';
+        api.setGameNotice(null);
+      });
+
+      mp.on('reconnectFailed', () => {
+        api.setGameNotice({ ko: '서버 연결이 끊어졌습니다. 새로고침해주세요.', en: 'Connection lost. Please refresh.' });
+      });
+
+      mp.on('error', (data) => {
+        lobbyApi && lobbyApi.setStatus && lobbyApi.setStatus({ ko: '오류: ' + data.message, en: 'Error: ' + data.message });
+      });
+
+      // ── 서버 emit 커스텀 이벤트 ─────────────
       mp.onServer('moveApplied', (data) => {
         if (data.state) {
           state = MOD.deserialize ? MOD.deserialize(data.state) : data.state;
           currentTurn = state.currentTurn || state.turn;
           if (config.board.render) config.board.render(state, api);
+          updateHudTurn();
         }
       });
+
+      mp.onServer('syncState', (data) => {
+        if (data.state) {
+          state = MOD.deserialize ? MOD.deserialize(data.state) : data.state;
+          currentTurn = state.currentTurn || state.turn;
+          if (config.board.render) config.board.render(state, api);
+          updateHudTurn();
+        }
+      });
+
+      mp.onServer('turnTimer', (data) => {
+        if (data.deadline) {
+          const seconds = Math.max(0, (data.deadline - Date.now()) / 1000);
+          startTimerDisplay(seconds);
+        } else if (data.seconds) {
+          startTimerDisplay(data.seconds);
+        }
+      });
+
+      mp.onServer('eloUpdate', (data) => {
+        pendingEloUpdate = { before: data.before, after: data.after, change: data.change };
+        // 게임오버 모달이 이미 열려 있으면 재렌더
+        if (activeOverModal && lastEndData) {
+          const cfg = computeGameOverCfg(lastEndData);
+          if (activeOverModal.close) activeOverModal.close();
+          activeOverModal = Keenple.UI.GameOverModal(cfg);
+          pendingEloUpdate = null;
+        }
+      });
+
+      mp.onServer('roomList', (rooms) => {
+        if (lobbyApi && lobbyApi.pushRooms) lobbyApi.pushRooms(rooms);
+      });
+
+      // 게임이 자체적으로 받고 싶은 MP 이벤트 추가 구독 (config.mp.customListeners)
+      if (config.mp && config.mp.customListeners) {
+        Object.keys(config.mp.customListeners).forEach(ev => {
+          mp.onServer(ev, (data) => config.mp.customListeners[ev](data, api));
+        });
+      }
+
       return mp;
     }
 
@@ -428,7 +667,12 @@
       renderRoomOptions(mount, options, 'mp', (values) => {
         mount.style.display = 'none';
         ensureMp();
-        mp.createRoom({ ...values }, getNickname(), getKeenpleUserId());
+        const tryCreate = (attempts = 0) => {
+          if (mp.connected) mp.createRoom(values, getNickname(), getKeenpleUserId());
+          else if (attempts > 50) lobbyApi && lobbyApi.setStatus && lobbyApi.setStatus({ ko: '서버 연결 실패', en: 'Server connection failed' });
+          else setTimeout(() => tryCreate(attempts + 1), 100);
+        };
+        tryCreate();
       }, () => {
         mount.style.display = 'none';
         if (lobbyApi) lobbyApi.show();
@@ -437,15 +681,34 @@
 
     function handleRankMatch() {
       if (!modes.mp || !modes.mp.rankMatch) return;
+      if (!getKeenpleUserId()) {
+        api.showToast({ ko: '랭크 매칭은 로그인 후 이용 가능합니다', en: 'Login required for ranked match' }, { type: 'error' });
+        Keenple.login && Keenple.login(window.location.href);
+        return;
+      }
       ensureMp();
       if (Keenple.Match && Keenple.Match.findGame) {
-        Keenple.Match.findGame({
+        activeMatch = Keenple.Match.findGame({
           gameKey: GAME_KEY,
           onMatched: (data) => {
-            if (data.isHost) mp.createRoom({ preferredCode: data.roomCode, matched: true }, getNickname(), getKeenpleUserId());
-            else setTimeout(() => mp.joinRoom(data.roomCode, getNickname(), getKeenpleUserId()), 800);
+            activeMatch = null;
+            matchEloInfo = { myElo: data.myElo, opponent: data.opponent };
+            const tryMatched = (attempts = 0) => {
+              if (mp && mp.connected) {
+                if (data.isHost) mp.createRoom({ preferredCode: data.roomCode, matched: true }, getNickname(), getKeenpleUserId());
+                else setTimeout(() => mp.joinRoom(data.roomCode, getNickname(), getKeenpleUserId()), 800);
+              } else if (attempts > 50) {
+                api.showToast({ ko: '서버 연결 실패', en: 'Server connection failed' }, { type: 'error' });
+              } else { setTimeout(() => tryMatched(attempts + 1), 100); }
+            };
+            tryMatched();
           },
-          onError: (e) => api.showToast({ ko: '매칭 실패', en: 'Matching failed' }, { type: 'error' }),
+          onCancel: () => { activeMatch = null; },
+          onError: (e) => {
+            activeMatch = null;
+            if (e.status === 401) Keenple.login && Keenple.login(window.location.href);
+            else api.showToast({ ko: '매칭 시작 실패', en: 'Failed to start matching' }, { type: 'error' });
+          },
         });
       }
     }
@@ -465,20 +728,40 @@
         mount: '#lobby-mount',
         title: GAME_NAME,
         buttons: buildLobbyButtons(),
-        joinInput: modes.mp && modes.mp.enabled !== false ? { enabled: true, onJoin: (code) => { ensureMp(); mp.joinRoom(code, getNickname(), getKeenpleUserId()); } } : undefined,
-        roomList: modes.mp && modes.mp.enabled !== false ? { enabled: true, fetchRooms: () => fetch('api/rooms').then(r => r.json()).catch(() => []), pollInterval: 10000, onRoomClick: (r) => { ensureMp(); mp.joinRoom(r.code, getNickname(), getKeenpleUserId()); } } : undefined,
-        onCancel: () => { if (mp) { mp.clearSession && mp.clearSession(); mp.disconnect && mp.disconnect(); mp = null; } },
+        joinInput: modes.mp && modes.mp.enabled !== false
+          ? { enabled: true, onJoin: (code) => { ensureMp(); const tryJ = (a=0)=>{ if(mp.connected) mp.joinRoom(code, getNickname(), getKeenpleUserId()); else if(a>50) return; else setTimeout(()=>tryJ(a+1),100); }; tryJ(); } }
+          : undefined,
+        roomList: modes.mp && modes.mp.enabled !== false
+          ? {
+              enabled: true,
+              fetchRooms: () => fetch('api/rooms').then(r => r.json()).catch(() => []),
+              pollInterval: 10000,
+              onRoomClick: (r) => { ensureMp(); const tryJ = (a=0)=>{ if(mp.connected) mp.joinRoom(r.code, getNickname(), getKeenpleUserId()); else if(a>50) return; else setTimeout(()=>tryJ(a+1),100); }; tryJ(); }
+            }
+          : undefined,
+        onCancel: () => {
+          if (mp) { mp.clearSession && mp.clearSession(); mp.disconnect && mp.disconnect(); mp = null; }
+          if (activeMatch && activeMatch.cancel) { activeMatch.cancel(); activeMatch = null; }
+        },
       });
+
+      // 재연결 가능 여부 체크 (localStorage)
+      try {
+        const savedPid = localStorage.getItem('mp_playerId');
+        const savedRoom = localStorage.getItem('mp_roomCode');
+        if (savedPid && savedRoom) {
+          lobbyApi.setStatus && lobbyApi.setStatus({ ko: '재연결 중...', en: 'Reconnecting...' });
+          ensureMp();
+        }
+      } catch (e) {}
     }
 
-    // keenple:langchange 이벤트 — 보드 재렌더
     window.addEventListener('keenple:langchange', () => {
       if (state && config.board.render) config.board.render(state, api);
     });
 
     bootstrap();
 
-    // 외부 API (테스트/디버그용)
     return {
       getState: () => state,
       getMode: () => mode,
@@ -487,9 +770,6 @@
     };
   }
 
-  // ============================================
-  //  Export
-  // ============================================
   const KeenpleShell = { createTurnBased };
   if (typeof module === 'object' && module.exports) module.exports = KeenpleShell;
   else root.KeenpleShell = KeenpleShell;
