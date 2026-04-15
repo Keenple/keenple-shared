@@ -1,6 +1,6 @@
 {
   "name": "@keenple/shared",
-  "version": "2.0.0-alpha.9",
+  "version": "2.0.0-alpha.10",
   "description": "Keenple 게임들의 공통 모듈 · 카테고리별 Game Shell (v2.0+)",
   "repository": {
     "type": "git",

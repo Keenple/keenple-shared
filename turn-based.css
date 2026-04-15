@@ -17,6 +17,7 @@
 }
 
 /* ── 전역 ──────────────────────────────────── */
+html, body.keenple-shell { overflow: hidden; }
 body.keenple-shell {
   margin: 0;
   padding: 0;
