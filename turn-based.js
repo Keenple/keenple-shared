@@ -1,5 +1,5 @@
 // ============================================
-// @keenple/shared — Turn-Based Game Shell (v2.0.0-alpha.4)
+// @keenple/shared — Turn-Based Game Shell (v2.0.0-alpha.5)
 //
 // KeenpleShell.createTurnBased(config) 호출 한 번으로:
 //  - 표준 DOM 레이아웃 주입
@@ -325,7 +325,7 @@
       undoStack.clear();
 
       if (extras.gameState) {
-        state = MOD.deserialize ? MOD.deserialize(extras.gameState) : extras.gameState;
+        state = (typeof extras.gameState === 'string' && MOD.deserialize) ? MOD.deserialize(extras.gameState) : extras.gameState;
       } else {
         state = MOD.createInitialState(extras);
       }
@@ -412,7 +412,7 @@
     undoBtn.addEventListener('click', () => {
       if (!undoStack.size() || gameOver) return;
       const prev = undoStack.pop();
-      state = MOD.deserialize ? MOD.deserialize(prev) : prev;
+      state = (typeof prev === 'string' && MOD.deserialize) ? MOD.deserialize(prev) : prev;
       currentTurn = state.currentTurn || state.turn;
       if (config.board.render) config.board.render(state, api);
       updateHudTurn();
@@ -596,7 +596,7 @@
       // ── 서버 emit 커스텀 이벤트 ─────────────
       mp.onServer('moveApplied', (data) => {
         if (data.state) {
-          state = MOD.deserialize ? MOD.deserialize(data.state) : data.state;
+          state = (typeof data.state === 'string' && MOD.deserialize) ? MOD.deserialize(data.state) : data.state;
           currentTurn = state.currentTurn || state.turn;
           if (config.board.render) config.board.render(state, api);
           updateHudTurn();
@@ -605,7 +605,7 @@
 
       mp.onServer('syncState', (data) => {
         if (data.state) {
-          state = MOD.deserialize ? MOD.deserialize(data.state) : data.state;
+          state = (typeof data.state === 'string' && MOD.deserialize) ? MOD.deserialize(data.state) : data.state;
           currentTurn = state.currentTurn || state.turn;
           if (config.board.render) config.board.render(state, api);
           updateHudTurn();
