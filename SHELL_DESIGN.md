@@ -406,6 +406,13 @@ Keenple.t({ ko: '한글', en: 'English', ja: '日本語' }); // 신규
 
 이 변경은 **keenple-main 담당에게 요청해야 할 작업**. Shell v2는 SDK 수정 완료 후 객체형 사용 가능. 완료 전까지는 2-인자 유지.
 
+### 10.2.1 게임 코드 제약 — `position:fixed; top:0` 요소 금지
+
+shell의 HUD 자동 측정(`measureHudOffset`)은 viewport 상단(top ≤ 20px, height < 200px)에 붙은 fixed 요소를 HUD로 간주한다. 게임 코드가 같은 조건의 banner/toast/notice를 띄우면 HUD로 오인되어 게임 화면이 그만큼 아래로 밀린다.
+
+- 토스트/알림은 `top` 대신 `bottom` 또는 화면 중앙 사용
+- 부득이 상단에 띄울 경우 `top: 60px` 이상으로 띄워 측정 윈도우 밖에 두기
+
 ### 10.3 검증 체크리스트 (오목용)
 
 shell v2 이식 진행 중 매 마일스톤마다 오목 동작 확인:

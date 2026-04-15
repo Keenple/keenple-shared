@@ -180,20 +180,28 @@
     const h = measureHudOffset();
     if (h > 0) document.documentElement.style.setProperty('--keenple-hud-offset', h + 'px');
   }
-  // 초기 + 리사이즈 + DOM 변화 시 재측정
+  // 초기 + 리사이즈 + DOM 변화 + 언어 전환 시 재측정
   if (typeof window !== 'undefined') {
-    if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    const kickoff = () => {
       setTimeout(updateHudOffsetVar, 0);
       setTimeout(updateHudOffsetVar, 200);  // SDK TopBar/Hud 생성 후
       setTimeout(updateHudOffsetVar, 800);
+    };
+    if (document.readyState === 'complete' || document.readyState === 'interactive') {
+      kickoff();
     } else {
-      window.addEventListener('DOMContentLoaded', () => {
-        setTimeout(updateHudOffsetVar, 0);
-        setTimeout(updateHudOffsetVar, 200);
-        setTimeout(updateHudOffsetVar, 800);
-      });
+      window.addEventListener('DOMContentLoaded', kickoff);
     }
     window.addEventListener('resize', updateHudOffsetVar);
+    // SDK MatchHud가 ELO 응답 등으로 800ms 이후 늦게 렌더되는 경우 대응
+    if (typeof MutationObserver !== 'undefined') {
+      const start = () => new MutationObserver(updateHudOffsetVar)
+        .observe(document.body, { childList: true, subtree: false });
+      if (document.body) start();
+      else window.addEventListener('DOMContentLoaded', start);
+    }
+    // 한/영 전환 시 HUD 텍스트 길이 변화로 줄바꿈/높이 변동
+    window.addEventListener('keenple:langchange', updateHudOffsetVar);
   }
 
   function showShellError(label, err) {
