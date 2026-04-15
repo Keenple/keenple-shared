@@ -33,10 +33,11 @@ body.keenple-shell {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 100vh;
-  /* 상단 TopBar(40) + MatchHud(~80) = ~120px. 완벽한 시각적 중앙정렬
-     조건: padding-top − padding-bottom = HUD높이. 그래서 140/20. */
-  padding: 140px 20px 20px;
+  /* 상단 HUD(TopBar+MatchHud) 영역만큼 위를 비워두고, 나머지 공간에
+     정확히 수직 중앙. margin-top으로 HUD 공간을 배제. */
+  height: calc(100vh - 90px);
+  margin-top: 90px;
+  padding: 0 20px;
   box-sizing: border-box;
   position: relative;
 }
@@ -101,8 +102,9 @@ body.keenple-shell {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 100vh;
-  padding: 140px 20px 20px;
+  height: calc(100vh - 90px);
+  margin-top: 90px;
+  padding: 0 20px;
   box-sizing: border-box;
 }
 .keenple-picker-title {
