@@ -158,6 +158,24 @@
   }
 
   // ============================================
+  //  Fail-safe error display
+  // ============================================
+  function showShellError(label, err) {
+    console.error('[KeenpleShell] ' + label, err);
+    let box = document.getElementById('keenple-shell-error');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'keenple-shell-error';
+      box.style.cssText = 'position:fixed;top:60px;left:20px;right:20px;background:#2d1020;border:2px solid #ff4466;border-radius:8px;padding:16px;z-index:9999;color:#ffaabb;font-family:monospace;font-size:12px;white-space:pre-wrap;max-height:70vh;overflow:auto;';
+      document.body.appendChild(box);
+    }
+    const stack = (err && err.stack) ? err.stack : String(err);
+    box.textContent = '[KeenpleShell ERROR — ' + label + ']\n' + stack + '\n\n' + (box.textContent || '');
+  }
+  window.addEventListener('error', (e) => showShellError('window.error', e.error || e.message));
+  window.addEventListener('unhandledrejection', (e) => showShellError('unhandledrejection', e.reason));
+
+  // ============================================
   //  Main — createTurnBased
   // ============================================
   function createTurnBased(config) {
@@ -720,10 +738,14 @@
     // ── 부트스트랩 ────────────────────────────
     async function bootstrap() {
       try {
+        if (typeof Keenple === 'undefined') throw new Error('Keenple SDK 미로드');
+        if (!Keenple.UI || !Keenple.UI.Lobby) throw new Error('Keenple.UI.Lobby 없음');
+        if (typeof GameClient === 'undefined') console.warn('[shell] GameClient 미정의 — MP 비활성');
         const user = await Keenple.getUser();
         if (user) { _nickname = user.nickname; _userId = user.id; }
-      } catch (e) {}
+      } catch (e) { showShellError('bootstrap-prechecks', e); }
 
+      try {
       lobbyApi = Keenple.UI.Lobby({
         mount: '#lobby-mount',
         title: GAME_NAME,
@@ -745,6 +767,8 @@
         },
       });
 
+      } catch (e) { showShellError('Keenple.UI.Lobby 호출 실패', e); return; }
+
       // 재연결 가능 여부 체크 (localStorage)
       try {
         const savedPid = localStorage.getItem('mp_playerId');
@@ -753,14 +777,15 @@
           lobbyApi.setStatus && lobbyApi.setStatus({ ko: '재연결 중...', en: 'Reconnecting...' });
           ensureMp();
         }
-      } catch (e) {}
+      } catch (e) { showShellError('reconnect-check', e); }
     }
 
     window.addEventListener('keenple:langchange', () => {
-      if (state && config.board.render) config.board.render(state, api);
+      try { if (state && config.board.render) config.board.render(state, api); }
+      catch (e) { showShellError('langchange-render', e); }
     });
 
-    bootstrap();
+    bootstrap().catch(e => showShellError('bootstrap', e));
 
     return {
       getState: () => state,
