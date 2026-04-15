@@ -1,5 +1,5 @@
 // ============================================
-// @keenple/shared — Turn-Based Game Shell (v2.0.0-alpha.5)
+// @keenple/shared — Turn-Based Game Shell (v2.0.0-alpha.6)
 //
 // KeenpleShell.createTurnBased(config) 호출 한 번으로:
 //  - 표준 DOM 레이아웃 주입
@@ -684,6 +684,11 @@
       mount.style.display = '';
       renderRoomOptions(mount, options, 'mp', (values) => {
         mount.style.display = 'none';
+        // 방 생성 동안 로비 다시 표시 + 상태 메시지 ("roomCreated" 이벤트가 도착하면 방 코드 표시로 갱신됨)
+        if (lobbyApi) {
+          lobbyApi.show();
+          lobbyApi.setStatus && lobbyApi.setStatus({ ko: '방 만드는 중...', en: 'Creating room...' });
+        }
         ensureMp();
         const tryCreate = (attempts = 0) => {
           if (mp.connected) mp.createRoom(values, getNickname(), getKeenpleUserId());
