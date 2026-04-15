@@ -1,0 +1,24 @@
+/* Keenple 공통 "로비로 돌아가기" 버튼 스타일 */
+.keenple-back-to-lobby {
+  background: rgba(255,255,255,0.06);
+  color: #e0e0e0;
+  border: 1px solid rgba(255,255,255,0.15);
+  padding: 7px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  font-family: inherit;
+}
+.keenple-back-to-lobby:hover {
+  background: rgba(255,255,255,0.12);
+  border-color: rgba(255,255,255,0.3);
+}
+/* fixed 배치용 — 좌하단 (Keenple.UI.MatchHud가 상단을 가리기 때문) */
+.back-to-lobby-fixed {
+  position: fixed;
+  bottom: 16px;
+  left: 16px;
+  z-index: 200;
+}

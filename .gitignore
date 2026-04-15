@@ -1,0 +1,14 @@
+node_modules/
+.env
+.env.*
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.log
+dist/
+build/
+*.bak
+*.tmp
+.claude/

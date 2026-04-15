@@ -1,0 +1,25 @@
+{
+  "name": "@keenple/shared",
+  "version": "1.0.0",
+  "description": "Keenple 게임들의 공통 모듈 (multiplayer · back-to-lobby · 공용 스타일)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Keenple/keenple-shared.git"
+  },
+  "main": "multiplayer/server-mp.js",
+  "exports": {
+    ".": "./multiplayer/server-mp.js",
+    "./server-mp": "./multiplayer/server-mp.js",
+    "./client-mp.js": "./multiplayer/client-mp.js",
+    "./back-to-lobby.js": "./core/back-to-lobby.js",
+    "./back-to-lobby.css": "./styles/back-to-lobby.css"
+  },
+  "files": [
+    "multiplayer/",
+    "core/",
+    "styles/",
+    "README.md"
+  ],
+  "license": "UNLICENSED",
+  "private": true
+}
