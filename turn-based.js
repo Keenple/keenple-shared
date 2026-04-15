@@ -1,5 +1,5 @@
 // ============================================
-// @keenple/shared — Turn-Based Game Shell (v2.0.0-alpha.6)
+// @keenple/shared — Turn-Based Game Shell (v2.0.0-alpha.7)
 //
 // KeenpleShell.createTurnBased(config) 호출 한 번으로:
 //  - 표준 DOM 레이아웃 주입
@@ -789,6 +789,14 @@
       try { if (state && config.board.render) config.board.render(state, api); }
       catch (e) { showShellError('langchange-render', e); }
     });
+
+    // ── 탭 닫기·새로고침·뒤로가기 시 자동 항복 (MP만) ──
+    function tryAutoSurrender() {
+      if (mode !== 'mp' || gameOver || !mp || !mp.surrender) return;
+      try { mp.surrender(); } catch (e) {}
+    }
+    window.addEventListener('beforeunload', tryAutoSurrender);
+    window.addEventListener('pagehide', tryAutoSurrender);  // 모바일 safari 등
 
     bootstrap().catch(e => showShellError('bootstrap', e));
 
