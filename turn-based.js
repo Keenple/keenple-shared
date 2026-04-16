@@ -831,19 +831,40 @@
     }
 
     // ── Lobby 구성 ────────────────────────────
+    function requireLogin(actionLabel) {
+      api.showToast({
+        ko: (actionLabel || '이 기능') + '은 로그인 후 이용 가능합니다',
+        en: 'Login required — ' + (actionLabel || 'this feature'),
+      }, { type: 'error' });
+      Keenple.login && Keenple.login(window.location.href);
+    }
+
     function buildLobbyButtons() {
       const buttons = [];
       const loggedIn = !!_userId;
-      if (loggedIn && modes.mp && modes.mp.enabled !== false) {
-        const createLabel = defaultEntryFee > 0
+      if (modes.mp && modes.mp.enabled !== false) {
+        const createLabel = !loggedIn
+          ? { ko: '방 만들기 🔒', en: 'Create Room 🔒' }
+          : defaultEntryFee > 0
           ? { ko: '방 만들기 · ' + defaultEntryFee + ' coin', en: 'Create Room · ' + defaultEntryFee + ' coin' }
           : { ko: '방 만들기', en: 'Create Room' };
-        buttons.push({ id: 'create', label: createLabel, primary: true, onClick: () => openRoomOptions('create') });
+        buttons.push({
+          id: 'create',
+          label: createLabel,
+          primary: true,
+          onClick: () => loggedIn ? openRoomOptions('create') : requireLogin('방 만들기'),
+        });
         if (modes.mp.rankMatch) {
-          const rankLabel = defaultEntryFee > 0
+          const rankLabel = !loggedIn
+            ? { ko: '랭크 매칭 🔒', en: 'Ranked Match 🔒' }
+            : defaultEntryFee > 0
             ? { ko: '랭크 매칭 · ' + defaultEntryFee + ' coin', en: 'Ranked Match · ' + defaultEntryFee + ' coin' }
             : { ko: '랭크 매칭', en: 'Ranked Match' };
-          buttons.push({ id: 'rank', label: rankLabel, onClick: () => handleRankMatch() });
+          buttons.push({
+            id: 'rank',
+            label: rankLabel,
+            onClick: () => loggedIn ? handleRankMatch() : requireLogin('랭크 매칭'),
+          });
         }
       }
       if (modes.ai && modes.ai.enabled !== false && (modes.ai.difficulties || []).length) {
@@ -1008,15 +1029,17 @@
         mount: '#lobby-mount',
         title: GAME_NAME,
         buttons: buildLobbyButtons(),
-        joinInput: (_userId && modes.mp && modes.mp.enabled !== false)
-          ? { enabled: true, onJoin: (code) => joinRoomWithConfirm(code, defaultEntryFee) }
+        joinInput: (modes.mp && modes.mp.enabled !== false)
+          ? { enabled: true, onJoin: (code) => _userId ? joinRoomWithConfirm(code, defaultEntryFee) : requireLogin('방 참가') }
           : undefined,
-        roomList: (_userId && modes.mp && modes.mp.enabled !== false)
+        roomList: (modes.mp && modes.mp.enabled !== false)
           ? {
               enabled: true,
               fetchRooms: () => fetch('api/rooms').then(r => r.json()).catch(() => []),
               pollInterval: 10000,
-              onRoomClick: (r) => joinRoomWithConfirm(r.code, r.entryFee != null ? r.entryFee : defaultEntryFee),
+              onRoomClick: (r) => _userId
+                ? joinRoomWithConfirm(r.code, r.entryFee != null ? r.entryFee : defaultEntryFee)
+                : requireLogin('방 참가'),
             }
           : undefined,
         onCancel: () => {
