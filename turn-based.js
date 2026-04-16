@@ -672,20 +672,22 @@
     function purchaseItem(opts) {
       opts = opts || {};
       var price = opts.price || 0;
+      var currency = opts.currency === 'keen' ? 'keen' : 'coin';
       var name = opts.name || { ko: '아이템', en: 'Item' };
       if (!_userId) { requireLogin('아이템 구매'); return; }
-      if (price > 0 && _coinBalance != null && _coinBalance < price) {
-        showInsufficientCoinsModal(price, _coinBalance);
+      var bal = getBalance(currency);
+      if (price > 0 && bal != null && bal < price) {
+        showInsufficientModal(price, bal, currency);
         return;
       }
       var proceed = function () {
-        runPurchase(opts);
+        runPurchase(opts, currency);
       };
       if (opts.confirm === false) { proceed(); return; }
-      showPurchaseConfirmModal(name, price, proceed, opts.onCancel);
+      showPurchaseConfirmModal(name, price, currency, proceed, opts.onCancel);
     }
 
-    function showPurchaseConfirmModal(name, price, onOk, onCancel) {
+    function showPurchaseConfirmModal(name, price, currency, onOk, onCancel) {
       var label = typeof name === 'string' ? name : (name[Keenple.getLang && Keenple.getLang()] || name.ko || name.en);
       var overlay = document.createElement('div');
       overlay.className = 'keenple-fee-confirm-overlay keenple-item-confirm';
@@ -694,7 +696,7 @@
           '<div class="keenple-fee-confirm-icon">🛒</div>' +
           '<div class="keenple-fee-confirm-title">' + t('아이템 구매', 'Purchase Item') + '</div>' +
           '<div class="keenple-fee-confirm-msg">' +
-            '<b>' + label + '</b>' + t('을(를)', '') + ' <b>' + price + ' coin</b>' +
+            '<b>' + label + '</b>' + t('을(를)', '') + ' <b>' + price + ' ' + currency + '</b>' +
             t('에 구매하시겠습니까?', '?') +
           '</div>' +
           '<div class="keenple-fee-confirm-buttons">' +
@@ -710,15 +712,16 @@
       requestAnimationFrame(function () { overlay.classList.add('keenple-fee-confirm-in'); });
     }
 
-    async function runPurchase(opts) {
+    async function runPurchase(opts, currency) {
       var price = opts.price || 0;
       try {
         if (typeof opts.serverCall === 'function') {
           var result = await opts.serverCall();
           if (!result || !result.ok) {
             var err = (result && result.error) || 'purchase_failed';
-            if (err === 'insufficient_funds' && _coinBalance != null) {
-              showInsufficientCoinsModal(price, _coinBalance);
+            var bal = getBalance(currency);
+            if (err === 'insufficient_funds' && bal != null) {
+              showInsufficientModal(price, bal, currency);
             } else {
               api.showToast({ ko: '구매 실패: ' + err, en: 'Purchase failed: ' + err }, { type: 'error' });
             }
@@ -726,11 +729,12 @@
           }
         } else {
           // mock — 클라 잔액만 감산 (실 서버 연결은 게임이 serverCall에 구현)
-          if (_coinBalance != null && price > 0) _coinBalance = Math.max(0, _coinBalance - price);
+          var curBal = getBalance(currency);
+          if (curBal != null && price > 0) setBalanceLocal(currency, Math.max(0, curBal - price));
         }
         // 차감 성공 → 애니메이션 + 잔액 갱신 + 효과 발동
-        if (price > 0) showFeeDeductionAnimation(price);
-        try { window.dispatchEvent(new CustomEvent('keenple:wallet-changed', { detail: { reason: 'item_purchase', amount: -price } })); } catch (e) {}
+        if (price > 0) showFeeDeductionAnimation(price, currency);
+        try { window.dispatchEvent(new CustomEvent('keenple:wallet-changed', { detail: { reason: 'item_purchase', amount: -price, currency: currency } })); } catch (e) {}
         if (Keenple.Wallet && Keenple.Wallet.refresh) { try { Keenple.Wallet.refresh(); } catch (e) {} }
         refreshCoinBalance();
         if (typeof opts.onSuccess === 'function') opts.onSuccess();
@@ -763,7 +767,8 @@
     }
 
     // ── 입장료 차감 애니메이션 ─────────────────
-    function showFeeDeductionAnimation(fee) {
+    function showFeeDeductionAnimation(fee, currency) {
+      currency = currency || 'coin';
       dismissPendingFee(true);
       var node = document.createElement('div');
       node.className = 'keenple-fee-deduct';
@@ -771,8 +776,8 @@
         '<div class="keenple-fee-deduct-card">' +
           '<div class="keenple-fee-deduct-icon">🪙</div>' +
           '<div class="keenple-fee-deduct-text">' +
-            '<div class="keenple-fee-deduct-label" data-ko="입장료 차감" data-en="Entry Fee Charged">' + t('입장료 차감', 'Entry Fee Charged') + '</div>' +
-            '<div class="keenple-fee-deduct-amount">−' + fee + ' coin</div>' +
+            '<div class="keenple-fee-deduct-label">' + t('차감', 'Charged') + '</div>' +
+            '<div class="keenple-fee-deduct-amount">−' + fee + ' ' + currency + '</div>' +
           '</div>' +
         '</div>';
       document.body.appendChild(node);
@@ -1093,21 +1098,31 @@
 
     let _nickname = null, _userId = null;
     let _coinBalance = null;  // null = 아직 모름 (낙관적 허용)
+    let _keenBalance = null;
     function getNickname() { return _nickname; }
     function getKeenpleUserId() { return _userId; }
+    function getBalance(currency) {
+      return currency === 'keen' ? _keenBalance : _coinBalance;
+    }
+    function setBalanceLocal(currency, newVal) {
+      if (currency === 'keen') _keenBalance = newVal;
+      else _coinBalance = newVal;
+    }
 
     async function refreshCoinBalance() {
-      if (!_userId) { _coinBalance = null; return; }
+      if (!_userId) { _coinBalance = null; _keenBalance = null; return; }
       try {
         if (Keenple.Wallet && Keenple.Wallet.get) {
           const w = await Keenple.Wallet.get();
           _coinBalance = (w && (w.coin != null ? w.coin : w.coinBalance)) || 0;
+          _keenBalance = (w && (w.keen != null ? w.keen : w.keenBalance)) || 0;
           return;
         }
         const res = await fetch('/api/wallet', { credentials: 'include' });
         if (!res.ok) return;
         const w = await res.json();
         _coinBalance = (w.coin != null ? w.coin : w.coinBalance) || 0;
+        _keenBalance = (w.keen != null ? w.keen : w.keenBalance) || 0;
       } catch (e) {}
     }
 
@@ -1120,16 +1135,20 @@
     }
 
     function showInsufficientCoinsModal(required, current) {
+      showInsufficientModal(required, current, 'coin');
+    }
+    function showInsufficientModal(required, current, currency) {
+      currency = currency || 'coin';
+      var title = currency === 'keen' ? t('Keen 부족', 'Not Enough Keen') : t('코인 부족', 'Not Enough Coins');
       var overlay = document.createElement('div');
       overlay.className = 'keenple-fee-confirm-overlay keenple-fee-insufficient';
       overlay.innerHTML =
         '<div class="keenple-fee-confirm-card">' +
           '<div class="keenple-fee-confirm-icon">🪙</div>' +
-          '<div class="keenple-fee-confirm-title">' + t('코인 부족', 'Not Enough Coins') + '</div>' +
+          '<div class="keenple-fee-confirm-title">' + title + '</div>' +
           '<div class="keenple-fee-confirm-msg">' +
-            t('입장료', 'Entry fee') + ' <b>' + required + ' coin</b>' +
-            t('이 필요합니다.', ' required.') + '<br>' +
-            t('현재 보유', 'You have') + ': <b>' + current + ' coin</b>' +
+            '<b>' + required + ' ' + currency + '</b>' + t('이 필요합니다.', ' required.') + '<br>' +
+            t('현재 보유', 'You have') + ': <b>' + current + ' ' + currency + '</b>' +
           '</div>' +
           '<div class="keenple-fee-confirm-buttons">' +
             '<button class="keenple-fee-confirm-cancel">' + t('확인', 'OK') + '</button>' +
