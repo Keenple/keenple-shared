@@ -11,8 +11,17 @@
 
 var KEENPLE_MAIN_URL = process.env.KEENPLE_MAIN_URL || 'http://localhost:3100';
 var INTERNAL_SECRET = process.env.GAME_SERVER_SECRET;
+var _envWarned = false;
+function warnMissingEnvOnce() {
+  if (_envWarned) return;
+  _envWarned = true;
+  if (!process.env.KEENPLE_MAIN_URL) {
+    console.warn('[wallet-client] KEENPLE_MAIN_URL 환경변수 미설정 — localhost:3100 기본값 사용. production에서는 반드시 설정 필요.');
+  }
+}
 
 function postJson(path, body, idempotencyKey) {
+  warnMissingEnvOnce();
   if (!INTERNAL_SECRET) {
     return Promise.reject(new Error('GAME_SERVER_SECRET 환경변수가 필요합니다'));
   }
@@ -35,6 +44,7 @@ function postJson(path, body, idempotencyKey) {
 }
 
 function getJson(path) {
+  warnMissingEnvOnce();
   if (!INTERNAL_SECRET) {
     return Promise.reject(new Error('GAME_SERVER_SECRET 환경변수가 필요합니다'));
   }
