@@ -481,3 +481,59 @@ body.keenple-shell {
 }
 .keenple-fee-confirm-cancel:hover { background: rgba(255, 255, 255, 0.14); }
 .keenple-fee-confirm-cancel:active { transform: scale(0.96); }
+
+/* ── 아이템 구매 버튼 (표준) ───────────────────── */
+.keenple-item-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px 8px 14px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.18), rgba(79, 70, 229, 0.12));
+  border: 1px solid rgba(165, 180, 252, 0.4);
+  border-radius: 10px;
+  color: #e0e7ff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.08s, box-shadow 0.15s;
+  font-family: inherit;
+}
+.keenple-item-btn:hover {
+  background: linear-gradient(135deg, rgba(129, 140, 248, 0.28), rgba(99, 102, 241, 0.18));
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.25);
+}
+.keenple-item-btn:active { transform: scale(0.97); }
+.keenple-item-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.keenple-item-btn-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+.keenple-item-btn-label {
+  flex: 1 1 auto;
+  text-align: left;
+}
+.keenple-item-btn-price {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+.keenple-item-btn-price-coin {
+  background: rgba(251, 191, 36, 0.22);
+  color: #fde68a;
+  border: 1px solid rgba(251, 191, 36, 0.4);
+}
+.keenple-item-btn-price-keen {
+  background: rgba(244, 114, 182, 0.22);
+  color: #fbcfe8;
+  border: 1px solid rgba(244, 114, 182, 0.45);
+}
+.keenple-item-btn-price-icon { font-size: 13px; }
+.keenple-item-btn-price-amount { font-size: 12px; }

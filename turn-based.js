@@ -335,6 +335,10 @@
       //     onCancel:  () => { ... },              // 선택
       //   }
       buyItem: (opts) => purchaseItem(opts),
+      // 표준 아이템 구매 버튼 DOM 생성. 게임이 반환값을 원하는 위치에 appendChild.
+      //   opts: buyItem의 opts 전부 + { icon?: '↩️' | HTMLElement, className?: '' }
+      //   반환: HTMLButtonElement (클릭 시 buyItem 플로우 실행)
+      createItemButton: (opts) => buildItemButton(opts),
     };
 
     // ── Custom overlays 슬롯 생성 ─────────────
@@ -666,6 +670,54 @@
         node.classList.add('keenple-fee-deduct-out');
         setTimeout(() => { node.remove(); if (_pendingFeeNode === node) _pendingFeeNode = null; }, 450);
       }, 2000);
+    }
+
+    // ── 표준 아이템 버튼 DOM 생성 ────────────────
+    function buildItemButton(opts) {
+      opts = opts || {};
+      var currency = opts.currency === 'keen' ? 'keen' : 'coin';
+      var label = opts.label || opts.name || { ko: '아이템', en: 'Item' };
+      var btn = document.createElement('button');
+      btn.className = 'keenple-item-btn' + (opts.className ? ' ' + opts.className : '');
+      btn.type = 'button';
+
+      var iconNode;
+      if (opts.icon instanceof HTMLElement) iconNode = opts.icon;
+      else if (opts.icon) { iconNode = document.createElement('span'); iconNode.className = 'keenple-item-btn-icon'; iconNode.textContent = String(opts.icon); }
+
+      var labelNode = document.createElement('span');
+      labelNode.className = 'keenple-item-btn-label';
+      var labelText = typeof label === 'string' ? label : (label.ko || label.en || '');
+      labelNode.textContent = labelText;
+      if (typeof label === 'object') {
+        if (label.ko) labelNode.setAttribute('data-ko', label.ko);
+        if (label.en) labelNode.setAttribute('data-en', label.en);
+      }
+
+      var priceNode = document.createElement('span');
+      priceNode.className = 'keenple-item-btn-price keenple-item-btn-price-' + currency;
+      priceNode.innerHTML = '<span class="keenple-item-btn-price-icon">🪙</span>' +
+                            '<span class="keenple-item-btn-price-amount">' + (opts.price || 0) + '</span>';
+
+      if (iconNode) btn.appendChild(iconNode);
+      btn.appendChild(labelNode);
+      btn.appendChild(priceNode);
+
+      btn.addEventListener('click', function () {
+        if (btn.disabled) return;
+        purchaseItem({
+          itemId: opts.itemId,
+          name: label,
+          price: opts.price,
+          currency: currency,
+          confirm: opts.confirm,
+          serverCall: opts.serverCall,
+          onSuccess: opts.onSuccess,
+          onCancel: opts.onCancel,
+        });
+      });
+
+      return btn;
     }
 
     // ── 아이템 구매 플로우 ───────────────────────
