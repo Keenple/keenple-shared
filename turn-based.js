@@ -245,7 +245,11 @@
     const modes = config.modes || { local: { enabled: true } };
     const options = config.options || [];
     const hooks = config.hooks || {};
-    const undoMax = (modes.local && modes.local.undoMax) || 5;
+    function getUndoMax(m) {
+      if (m && modes[m] && typeof modes[m].undoMax === 'number') return modes[m].undoMax;
+      if (modes.local && typeof modes.local.undoMax === 'number') return modes.local.undoMax;
+      return 50;
+    }
     const defaultEntryFee = config.entryFee || 0;
     let _feeMismatchWarned = false;
     let _mockPurchaseWarned = false;
@@ -279,7 +283,7 @@
     let turnDeadline = 0;
     let timerInterval = null;
     let activeMatch = null;
-    const undoStack = createUndoStack(undoMax);
+    let undoStack = createUndoStack(getUndoMax(null));
     let undoUsedCount = 0;
 
     // ── DOM 주입 ─────────────────────────────
@@ -414,7 +418,7 @@
       extras = extras || {};
       gameOver = false;
       gameOverState = null;
-      undoStack.clear();
+      undoStack = createUndoStack(getUndoMax(startMode));
       undoUsedCount = 0;
       updateUndoBtnLabel();
 
@@ -854,8 +858,9 @@
 
     async function runPurchase(opts, currency) {
       var price = opts.price || 0;
+      var isMock = typeof opts.serverCall !== 'function';
       try {
-        if (typeof opts.serverCall === 'function') {
+        if (!isMock) {
           var result = await opts.serverCall();
           if (!result || !result.ok) {
             var err = (result && result.error) || 'purchase_failed';
@@ -868,7 +873,6 @@
             return;
           }
         } else {
-          // mock — 클라 잔액만 감산 (실 서버 연결은 게임이 serverCall에 구현)
           if (!_mockPurchaseWarned) {
             _mockPurchaseWarned = true;
             console.warn('[KeenpleShell] buyItem: serverCall 미지정 — mock 모드로 클라 잔액만 감산. 새로고침 시 원복됨. 실제 차감은 serverCall 구현 필요.');
@@ -876,11 +880,12 @@
           var curBal = getBalance(currency);
           if (curBal != null && price > 0) setBalanceLocal(currency, Math.max(0, curBal - price));
         }
-        // 차감 성공 → 애니메이션 + 잔액 갱신 + 효과 발동
         if (price > 0) showFeeDeductionAnimation(price, currency);
-        try { window.dispatchEvent(new CustomEvent('keenple:wallet-changed', { detail: { reason: 'item_purchase', amount: -price, currency: currency } })); } catch (e) {}
-        if (Keenple.Wallet && Keenple.Wallet.refresh) { try { Keenple.Wallet.refresh(); } catch (e) {} }
-        refreshCoinBalance();
+        try { window.dispatchEvent(new CustomEvent('keenple:wallet-changed', { detail: { reason: 'item_purchase', amount: -price, currency: currency, mock: isMock } })); } catch (e) {}
+        if (!isMock) {
+          if (Keenple.Wallet && Keenple.Wallet.refresh) { try { Keenple.Wallet.refresh(); } catch (e) {} }
+          refreshCoinBalance();
+        }
         if (typeof opts.onSuccess === 'function') opts.onSuccess();
       } catch (e) {
         console.error('[KeenpleShell] purchase 에러', e);
@@ -1318,7 +1323,10 @@
       // 코인 잔액 초기 조회 + 변화 이벤트 구독
       if (defaultEntryFee > 0) {
         refreshCoinBalance();
-        window.addEventListener('keenple:wallet-changed', () => { refreshCoinBalance(); });
+        window.addEventListener('keenple:wallet-changed', (e) => {
+          if (e && e.detail && e.detail.mock) return;
+          refreshCoinBalance();
+        });
       }
 
       try {
