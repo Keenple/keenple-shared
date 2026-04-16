@@ -109,9 +109,18 @@
     mount.appendChild(el('button', { class: 'keenple-back-link', onclick: onBack, dataKo: '← 뒤로', dataEn: '← Back' }, '← 뒤로'));
   }
 
-  function renderRoomOptions(mount, options, currentMode, onConfirm, onCancel) {
+  function renderRoomOptions(mount, options, currentMode, onConfirm, onCancel, entryFee) {
     mount.innerHTML = '';
     mount.appendChild(el('h2', { dataKo: '방 옵션', dataEn: 'Room Options' }, '방 옵션'));
+
+    if (entryFee > 0) {
+      const badge = el('div', { class: 'keenple-fee-banner' }, [
+        el('span', { class: 'keenple-fee-icon' }, '🪙'),
+        el('span', { class: 'keenple-fee-label', dataKo: '입장료', dataEn: 'Entry Fee' }, '입장료'),
+        el('span', { class: 'keenple-fee-amount' }, String(entryFee) + ' coin'),
+      ]);
+      mount.appendChild(badge);
+    }
 
     const values = {};
     const visible = options.filter(o => !o.applyTo || o.applyTo.indexOf(currentMode) >= 0);
@@ -140,8 +149,11 @@
       mount.appendChild(group);
     });
 
+    const confirmLabel = entryFee > 0
+      ? { ko: '확인 (' + entryFee + ' coin 차감)', en: 'Confirm (' + entryFee + ' coin)' }
+      : { ko: '확인', en: 'Confirm' };
     const buttons = el('div', { style: { display: 'flex', gap: '12px', marginTop: '16px', justifyContent: 'center' } }, [
-      el('button', { class: 'keenple-lobby-btn', onclick: () => onConfirm(values), dataKo: '확인', dataEn: 'Confirm' }, '확인'),
+      el('button', { class: 'keenple-lobby-btn', onclick: () => onConfirm(values), dataKo: confirmLabel.ko, dataEn: confirmLabel.en }, confirmLabel.ko),
       el('button', { class: 'keenple-lobby-back', onclick: onCancel, dataKo: '뒤로', dataEn: 'Back' }, '뒤로'),
     ]);
     mount.appendChild(buttons);
@@ -714,9 +726,15 @@
     function buildLobbyButtons() {
       const buttons = [];
       if (modes.mp && modes.mp.enabled !== false) {
-        buttons.push({ id: 'create', label: { ko: '방 만들기', en: 'Create Room' }, primary: true, onClick: () => openRoomOptions('create') });
+        const createLabel = defaultEntryFee > 0
+          ? { ko: '방 만들기 · ' + defaultEntryFee + ' coin', en: 'Create Room · ' + defaultEntryFee + ' coin' }
+          : { ko: '방 만들기', en: 'Create Room' };
+        buttons.push({ id: 'create', label: createLabel, primary: true, onClick: () => openRoomOptions('create') });
         if (modes.mp.rankMatch) {
-          buttons.push({ id: 'rank', label: { ko: '랭크 매칭', en: 'Ranked Match' }, onClick: () => handleRankMatch() });
+          const rankLabel = defaultEntryFee > 0
+            ? { ko: '랭크 매칭 · ' + defaultEntryFee + ' coin', en: 'Ranked Match · ' + defaultEntryFee + ' coin' }
+            : { ko: '랭크 매칭', en: 'Ranked Match' };
+          buttons.push({ id: 'rank', label: rankLabel, onClick: () => handleRankMatch() });
         }
       }
       if (modes.ai && modes.ai.enabled !== false && (modes.ai.difficulties || []).length) {
@@ -749,6 +767,7 @@
       renderRoomOptions(mount, options, 'mp', (values) => {
         mount.style.display = 'none';
         if (defaultEntryFee > 0 && values.entryFee == null) values.entryFee = defaultEntryFee;
+        // (onConfirm body follows)
         if (lobbyApi) {
           lobbyApi.show();
           lobbyApi.setStatus && lobbyApi.setStatus({ ko: '방 만드는 중...', en: 'Creating room...' });
@@ -763,7 +782,7 @@
       }, () => {
         mount.style.display = 'none';
         if (lobbyApi) lobbyApi.show();
-      });
+      }, defaultEntryFee);
     }
 
     function handleRankMatch() {
