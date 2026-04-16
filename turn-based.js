@@ -324,6 +324,17 @@
         gameNotice.textContent = typeof msg === 'string' ? msg : (msg[Keenple.getLang && Keenple.getLang()] || msg.ko || msg.en);
         gameNotice.style.display = '';
       },
+      // 아이템 즉시 구매 (게임 중 힌트·무르기 등 소비형).
+      //   opts: {
+      //     itemId:  'chess_undo_1',              // 로그/idempotency용
+      //     name:    { ko:'무르기', en:'Undo' },
+      //     price:   5,                            // coin
+      //     confirm: true,                         // 구매 확인 모달 (기본 true)
+      //     serverCall: async () => ({ ok:true }), // 실제 차감 호출. 생략 시 mock(클라만 감산)
+      //     onSuccess: () => { ... },              // 구매 성공 → 효과 발동
+      //     onCancel:  () => { ... },              // 선택
+      //   }
+      buyItem: (opts) => purchaseItem(opts),
     };
 
     // ── Custom overlays 슬롯 생성 ─────────────
@@ -655,6 +666,78 @@
         node.classList.add('keenple-fee-deduct-out');
         setTimeout(() => { node.remove(); if (_pendingFeeNode === node) _pendingFeeNode = null; }, 450);
       }, 2000);
+    }
+
+    // ── 아이템 구매 플로우 ───────────────────────
+    function purchaseItem(opts) {
+      opts = opts || {};
+      var price = opts.price || 0;
+      var name = opts.name || { ko: '아이템', en: 'Item' };
+      if (!_userId) { requireLogin('아이템 구매'); return; }
+      if (price > 0 && _coinBalance != null && _coinBalance < price) {
+        showInsufficientCoinsModal(price, _coinBalance);
+        return;
+      }
+      var proceed = function () {
+        runPurchase(opts);
+      };
+      if (opts.confirm === false) { proceed(); return; }
+      showPurchaseConfirmModal(name, price, proceed, opts.onCancel);
+    }
+
+    function showPurchaseConfirmModal(name, price, onOk, onCancel) {
+      var label = typeof name === 'string' ? name : (name[Keenple.getLang && Keenple.getLang()] || name.ko || name.en);
+      var overlay = document.createElement('div');
+      overlay.className = 'keenple-fee-confirm-overlay keenple-item-confirm';
+      overlay.innerHTML =
+        '<div class="keenple-fee-confirm-card">' +
+          '<div class="keenple-fee-confirm-icon">🛒</div>' +
+          '<div class="keenple-fee-confirm-title">' + t('아이템 구매', 'Purchase Item') + '</div>' +
+          '<div class="keenple-fee-confirm-msg">' +
+            '<b>' + label + '</b>' + t('을(를)', '') + ' <b>' + price + ' coin</b>' +
+            t('에 구매하시겠습니까?', '?') +
+          '</div>' +
+          '<div class="keenple-fee-confirm-buttons">' +
+            '<button class="keenple-fee-confirm-ok">' + t('구매', 'Buy') + '</button>' +
+            '<button class="keenple-fee-confirm-cancel">' + t('취소', 'Cancel') + '</button>' +
+          '</div>' +
+        '</div>';
+      document.body.appendChild(overlay);
+      var close = function () { overlay.classList.add('keenple-fee-confirm-out'); setTimeout(function(){ overlay.remove(); }, 200); };
+      overlay.querySelector('.keenple-fee-confirm-ok').onclick = function () { close(); onOk(); };
+      overlay.querySelector('.keenple-fee-confirm-cancel').onclick = function () { close(); if (onCancel) onCancel(); };
+      overlay.onclick = function (e) { if (e.target === overlay) { close(); if (onCancel) onCancel(); } };
+      requestAnimationFrame(function () { overlay.classList.add('keenple-fee-confirm-in'); });
+    }
+
+    async function runPurchase(opts) {
+      var price = opts.price || 0;
+      try {
+        if (typeof opts.serverCall === 'function') {
+          var result = await opts.serverCall();
+          if (!result || !result.ok) {
+            var err = (result && result.error) || 'purchase_failed';
+            if (err === 'insufficient_funds' && _coinBalance != null) {
+              showInsufficientCoinsModal(price, _coinBalance);
+            } else {
+              api.showToast({ ko: '구매 실패: ' + err, en: 'Purchase failed: ' + err }, { type: 'error' });
+            }
+            return;
+          }
+        } else {
+          // mock — 클라 잔액만 감산 (실 서버 연결은 게임이 serverCall에 구현)
+          if (_coinBalance != null && price > 0) _coinBalance = Math.max(0, _coinBalance - price);
+        }
+        // 차감 성공 → 애니메이션 + 잔액 갱신 + 효과 발동
+        if (price > 0) showFeeDeductionAnimation(price);
+        try { window.dispatchEvent(new CustomEvent('keenple:wallet-changed', { detail: { reason: 'item_purchase', amount: -price } })); } catch (e) {}
+        if (Keenple.Wallet && Keenple.Wallet.refresh) { try { Keenple.Wallet.refresh(); } catch (e) {} }
+        refreshCoinBalance();
+        if (typeof opts.onSuccess === 'function') opts.onSuccess();
+      } catch (e) {
+        console.error('[KeenpleShell] purchase 에러', e);
+        api.showToast({ ko: '구매 중 오류', en: 'Purchase error' }, { type: 'error' });
+      }
     }
 
     // ── 환불 애니메이션 (abort/payout) ─────────
