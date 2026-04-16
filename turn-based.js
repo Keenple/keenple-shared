@@ -565,6 +565,27 @@
       if (lobbyApi) { lobbyApi.show(); lobbyApi.setStatus && lobbyApi.setStatus(''); lobbyApi.showCancel && lobbyApi.showCancel(false); }
     }
 
+    // ── 입장료 예고 애니메이션 (방 입장 시) ─────
+    function showFeePendingAnimation(fee) {
+      var node = document.createElement('div');
+      node.className = 'keenple-fee-deduct keenple-fee-pending';
+      node.innerHTML =
+        '<div class="keenple-fee-deduct-card keenple-fee-pending-card">' +
+          '<div class="keenple-fee-deduct-icon">🪙</div>' +
+          '<div class="keenple-fee-deduct-text">' +
+            '<div class="keenple-fee-deduct-label">' + t('게임 시작 시 차감', 'Charged on Start') + '</div>' +
+            '<div class="keenple-fee-deduct-amount">' + fee + ' coin</div>' +
+          '</div>' +
+        '</div>';
+      document.body.appendChild(node);
+      requestAnimationFrame(() => node.classList.add('keenple-fee-deduct-in'));
+      setTimeout(() => {
+        node.classList.remove('keenple-fee-deduct-in');
+        node.classList.add('keenple-fee-deduct-out');
+        setTimeout(() => node.remove(), 450);
+      }, 2000);
+    }
+
     // ── 입장료 차감 애니메이션 ─────────────────
     function showFeeDeductionAnimation(fee) {
       var node = document.createElement('div');
@@ -635,7 +656,16 @@
           }
           return;
         }
-        lobbyApi && lobbyApi.setStatus && lobbyApi.setStatus({ ko: '입장 완료! 대기 중...', en: 'Joined! Waiting...' });
+        var jFee = (data && data.entryFee) || (data && data.options && data.options.entryFee) || 0;
+        if (jFee > 0) {
+          showFeePendingAnimation(jFee);
+          lobbyApi && lobbyApi.setStatus && lobbyApi.setStatus({
+            ko: '입장 완료 — 게임 시작 시 ' + jFee + ' coin 차감',
+            en: 'Joined — ' + jFee + ' coin will be charged on game start',
+          });
+        } else {
+          lobbyApi && lobbyApi.setStatus && lobbyApi.setStatus({ ko: '입장 완료! 대기 중...', en: 'Joined! Waiting...' });
+        }
       });
 
       mp.on('playerJoined', () => {
