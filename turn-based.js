@@ -234,6 +234,7 @@
     const options = config.options || [];
     const hooks = config.hooks || {};
     const undoMax = (modes.local && modes.local.undoMax) || 5;
+    const defaultEntryFee = config.entryFee || 0;
 
     // ── State ─────────────────────────────────
     let state = null;
@@ -571,9 +572,11 @@
 
       mp.on('roomCreated', (data) => {
         myRole = data.role;
+        var feeText = '';
+        if (data.entryFee > 0) feeText = ' (' + t('입장료: ' + data.entryFee + ' coin', 'Entry Fee: ' + data.entryFee + ' coin') + ')';
         lobbyApi && lobbyApi.setStatus && lobbyApi.setStatus({
-          ko: '방 코드: ' + data.roomCode + ' — 상대를 기다리는 중...',
-          en: 'Room Code: ' + data.roomCode + ' — Waiting for opponent...'
+          ko: '방 코드: ' + data.roomCode + ' — 상대를 기다리는 중...' + (data.entryFee > 0 ? ' (입장료: ' + data.entryFee + ' coin)' : ''),
+          en: 'Room Code: ' + data.roomCode + ' — Waiting for opponent...' + (data.entryFee > 0 ? ' (Entry Fee: ' + data.entryFee + ' coin)' : ''),
         });
         lobbyApi && lobbyApi.showCancel && lobbyApi.showCancel(true);
       });
@@ -619,6 +622,13 @@
       });
 
       mp.on('gameOver', (data) => handleGameOver(data));
+
+      mp.onServer('entryFeeError', (data) => {
+        lobbyApi && lobbyApi.setStatus && lobbyApi.setStatus({
+          ko: '코인 부족',
+          en: 'Not enough coins',
+        });
+      });
 
       mp.on('playerDisconnected', (data) => {
         disconnectOverlay.style.display = '';
@@ -728,7 +738,7 @@
       mount.style.display = '';
       renderRoomOptions(mount, options, 'mp', (values) => {
         mount.style.display = 'none';
-        // 방 생성 동안 로비 다시 표시 + 상태 메시지 ("roomCreated" 이벤트가 도착하면 방 코드 표시로 갱신됨)
+        if (defaultEntryFee > 0 && values.entryFee == null) values.entryFee = defaultEntryFee;
         if (lobbyApi) {
           lobbyApi.show();
           lobbyApi.setStatus && lobbyApi.setStatus({ ko: '방 만드는 중...', en: 'Creating room...' });

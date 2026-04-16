@@ -18,7 +18,19 @@ function createMultiplayerServer(io, options = {}) {
     reconnectTimeout = 30000,   // 재연결 대기 (ms)
     roomExpiry = 600000,        // 방 만료 (ms, 기본 10분)
     roomCodeLength = 6,
+    entryFee = 0,               // 기본 입장료 (coin). 0이면 무료. 방 옵션으로 덮어쓰기 가능.
+    gameId = null,              // wallet spend에 사용할 게임 식별자
   } = options;
+
+  // 입장료 기능 시 wallet-client 지연 로드
+  let wallet = null;
+  function getWallet() {
+    if (!wallet) {
+      try { wallet = require('./wallet-client'); }
+      catch (e) { console.error('[MP] wallet-client 로드 실패:', e.message); }
+    }
+    return wallet;
+  }
 
   // 역할 자동 생성
   const playerRoles = roles || Array.from({ length: maxPlayers }, (_, i) => `player${i + 1}`);
@@ -265,12 +277,14 @@ function createMultiplayerServer(io, options = {}) {
 
       socket.join(room.code);
 
+      const roomFee = (room.options && room.options.entryFee != null) ? room.options.entryFee : entryFee;
       const response = {
         roomCode: room.code,
         playerId,
         role,
         minPlayers,
         maxPlayers,
+        entryFee: roomFee,
       };
 
       socket.emit('roomCreated', response);
@@ -328,6 +342,7 @@ function createMultiplayerServer(io, options = {}) {
           nickname: existingPlayer.nickname,
         }, socket.id);
 
+        const rcFee = (room.options && room.options.entryFee != null) ? room.options.entryFee : entryFee;
         const reconnectResponse = {
           playerId,
           role: existingPlayer.role,
@@ -337,6 +352,7 @@ function createMultiplayerServer(io, options = {}) {
           gameOver: room.gameOver,
           gameState: room.gameState,
           options: room.options,
+          entryFee: rcFee,
           players: room.players.map(p => ({ role: p.role, nickname: p.nickname, connected: p.connected })),
         };
 
@@ -363,12 +379,14 @@ function createMultiplayerServer(io, options = {}) {
         };
         room.players.push(player);
 
+        const jFee = (room.options && room.options.entryFee != null) ? room.options.entryFee : entryFee;
         const joinResponse = {
           playerId,
           role,
           roomCode,
           reconnected: false,
           options: room.options,
+          entryFee: jFee,
           players: room.players.map(p => ({ role: p.role, nickname: p.nickname, connected: p.connected })),
         };
 
@@ -420,7 +438,7 @@ function createMultiplayerServer(io, options = {}) {
     });
 
     // 게임 시작 요청 (방장 전용)
-    socket.on('mp:startGame', (data = {}) => {
+    socket.on('mp:startGame', async (data = {}) => {
       const room = getRoom(currentRoomCode);
       if (!room || room.gameStarted) return;
 
@@ -430,6 +448,36 @@ function createMultiplayerServer(io, options = {}) {
       if (room.players.length < minPlayers) {
         socket.emit('error', { message: `최소 ${minPlayers}명이 필요합니다` });
         return;
+      }
+
+      // ── 입장료 차감 ──
+      const fee = (room.options && room.options.entryFee != null) ? room.options.entryFee : entryFee;
+      if (fee > 0) {
+        const w = getWallet();
+        if (!w) {
+          socket.emit('error', { message: '결제 모듈 연결 실패' });
+          return;
+        }
+        for (const p of room.players) {
+          if (!p.keenpleUserId) {
+            if (p.connected) io.to(p.socketId).emit('entryFeeError', { error: 'login_required' });
+            return;
+          }
+          const result = await w.spend({
+            userId: p.keenpleUserId,
+            currency: 'coin',
+            amount: fee,
+            type: 'entry_fee',
+            gameId: gameId || 'unknown',
+            refType: 'room',
+            refId: room.code,
+            idempotencyKey: 'entry-' + room.code + '-' + p.keenpleUserId,
+          });
+          if (!result.ok) {
+            if (p.connected) io.to(p.socketId).emit('entryFeeError', { error: 'insufficient_funds', required: fee });
+            return;
+          }
+        }
       }
 
       const startResult = callLifecycle('onBeforeGameStart', room, data);
@@ -568,7 +616,7 @@ function createMultiplayerServer(io, options = {}) {
     getStatusData,
 
     // 설정
-    config: { minPlayers, maxPlayers, playerRoles, reconnectTimeout, roomExpiry },
+    config: { minPlayers, maxPlayers, playerRoles, reconnectTimeout, roomExpiry, entryFee, gameId },
   };
 }
 
