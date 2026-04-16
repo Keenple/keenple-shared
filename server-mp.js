@@ -20,6 +20,12 @@ function createMultiplayerServer(io, options = {}) {
     roomCodeLength = 6,
     entryFee = 0,               // 기본 입장료 (coin). 0이면 무료. 방 옵션으로 덮어쓰기 가능.
     gameId = null,              // wallet spend에 사용할 게임 식별자
+    // 랭크 매칭 자동 리포트.
+    //   enabled: true로 켜면 room.matched 방이 끝날 때 자동으로 main에 결과 전송
+    //   buildReport(room, endData) → main에 보낼 payload (게임별 포맷)
+    //   dispatchUpdate(room, response) → main 응답을 플레이어별 eloUpdate 이벤트로 매핑
+    //   endpoint → main 측 경로 (기본 '/api/match/result')
+    rankMatch = null,
   } = options;
 
   // 입장료 기능 시 wallet-client 지연 로드
@@ -30,6 +36,50 @@ function createMultiplayerServer(io, options = {}) {
       catch (e) { console.error('[MP] wallet-client 로드 실패:', e.message); }
     }
     return wallet;
+  }
+
+  // 랭크 매치 결과 보고 (room.matched 방이 끝날 때 자동, 또는 mp.reportMatch 수동)
+  async function reportMatch(room, endData) {
+    if (!rankMatch || !rankMatch.enabled) return null;
+    if (typeof rankMatch.buildReport !== 'function') {
+      console.warn('[MP] rankMatch.buildReport 미정의 — skip');
+      return null;
+    }
+    const payload = rankMatch.buildReport(room, endData || {});
+    if (!payload) return null;
+    const endpoint = rankMatch.endpoint || '/api/match/result';
+    const baseUrl = process.env.KEENPLE_MAIN_URL || 'http://localhost:3100';
+    const secret = process.env.GAME_SERVER_SECRET;
+    if (!secret) {
+      console.warn('[MP] GAME_SERVER_SECRET 미설정 — rankMatch 보고 skip');
+      return null;
+    }
+    try {
+      const res = await fetch(baseUrl + endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-internal-secret': secret,
+        },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        console.warn('[MP] rankMatch 보고 실패:', res.status, data);
+        return null;
+      }
+      if (typeof rankMatch.dispatchUpdate === 'function') {
+        const updates = rankMatch.dispatchUpdate(room, data) || [];
+        for (const u of updates) {
+          const p = room.players.find(pp => pp.role === u.role);
+          if (p && p.connected) io.to(p.socketId).emit('eloUpdate', u.payload);
+        }
+      }
+      return data;
+    } catch (e) {
+      console.error('[MP] rankMatch 보고 에러:', e.message);
+      return null;
+    }
   }
 
   // 역할 자동 생성
@@ -244,6 +294,10 @@ function createMultiplayerServer(io, options = {}) {
     room.gameOver = true;
     broadcastToAll(room, 'gameOver', data);
     callLifecycle('onAfterEndGame', room, data);
+    // 랭크 매치 자동 보고 (room.matched 방만)
+    if (room.matched && rankMatch && rankMatch.enabled) {
+      reportMatch(room, data).catch(err => console.error('[MP] reportMatch:', err.message));
+    }
     scheduleRoomCleanup(room.code);
     console.log(`[MP] Game over: ${room.code}`);
   }
@@ -613,6 +667,7 @@ function createMultiplayerServer(io, options = {}) {
     // 게임 흐름
     startGame,
     endGame,
+    reportMatch,
 
     // 이벤트
     onGameEvent,
