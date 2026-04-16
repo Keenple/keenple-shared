@@ -167,8 +167,48 @@ function createMultiplayerServer(io, options = {}) {
 
   // ─── 게임 흐름 ─────────────────────────────────────────────
 
-  function startGame(room) {
+  // 입장료 차감 (양쪽 플레이어 coin). 성공 시 true.
+  // rematch 등 재시작 상황에서도 재차감되도록 매 시작마다 호출.
+  async function tryDeductEntryFees(room) {
+    const fee = (room.options && room.options.entryFee != null) ? room.options.entryFee : entryFee;
+    if (fee <= 0) return true;
+    const w = getWallet();
+    if (!w) {
+      room.players.forEach(p => { if (p.connected) io.to(p.socketId).emit('entryFeeError', { error: 'wallet_unavailable' }); });
+      return false;
+    }
+    // 매 게임 시작마다 고유 키 (rematch도 새 차감이 되어야 함)
+    const startSeq = (room._startSeq = (room._startSeq || 0) + 1);
+    for (const p of room.players) {
+      if (!p.keenpleUserId) {
+        if (p.connected) io.to(p.socketId).emit('entryFeeError', { error: 'login_required' });
+        return false;
+      }
+      const result = await w.spend({
+        userId: p.keenpleUserId,
+        currency: 'coin',
+        amount: fee,
+        type: 'entry_fee',
+        gameId: gameId || 'unknown',
+        refType: 'room',
+        refId: room.code,
+        idempotencyKey: 'entry-' + room.code + '-' + startSeq + '-' + p.keenpleUserId,
+      });
+      if (!result.ok) {
+        if (p.connected) io.to(p.socketId).emit('entryFeeError', { error: 'insufficient_funds', required: fee });
+        return false;
+      }
+    }
+    return true;
+  }
+
+  async function startGame(room) {
     if (room._idleTimer) { clearTimeout(room._idleTimer); room._idleTimer = null; }
+
+    // 입장료 차감 (rematch 포함 — 매번 재차감)
+    const feesOk = await tryDeductEntryFees(room);
+    if (!feesOk) return false;
+
     room.gameStarted = true;
     room.gameOver = false;
 
@@ -452,40 +492,11 @@ function createMultiplayerServer(io, options = {}) {
         return;
       }
 
-      // ── 입장료 차감 ──
-      const fee = (room.options && room.options.entryFee != null) ? room.options.entryFee : entryFee;
-      if (fee > 0) {
-        const w = getWallet();
-        if (!w) {
-          socket.emit('error', { message: '결제 모듈 연결 실패' });
-          return;
-        }
-        for (const p of room.players) {
-          if (!p.keenpleUserId) {
-            if (p.connected) io.to(p.socketId).emit('entryFeeError', { error: 'login_required' });
-            return;
-          }
-          const result = await w.spend({
-            userId: p.keenpleUserId,
-            currency: 'coin',
-            amount: fee,
-            type: 'entry_fee',
-            gameId: gameId || 'unknown',
-            refType: 'room',
-            refId: room.code,
-            idempotencyKey: 'entry-' + room.code + '-' + p.keenpleUserId,
-          });
-          if (!result.ok) {
-            if (p.connected) io.to(p.socketId).emit('entryFeeError', { error: 'insufficient_funds', required: fee });
-            return;
-          }
-        }
-      }
-
       const startResult = callLifecycle('onBeforeGameStart', room, data);
       if (startResult === false) return; // 시작 거부
 
-      startGame(room);
+      // 입장료 차감은 startGame 내부에서 처리됨 (rematch 등 다른 진입점도 동일)
+      await startGame(room);
     });
 
     // 커스텀 게임 이벤트 (mp:game:이벤트명)

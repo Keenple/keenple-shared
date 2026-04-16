@@ -605,8 +605,21 @@
       else doJoin();
     }
 
+    // 현재 노출 중인 입장료 예고 애니메이션 (차감 시 즉시 정리)
+    var _pendingFeeNode = null;
+    function dismissPendingFee(immediate) {
+      if (!_pendingFeeNode) return;
+      var node = _pendingFeeNode;
+      _pendingFeeNode = null;
+      if (immediate) { node.remove(); return; }
+      node.classList.remove('keenple-fee-deduct-in');
+      node.classList.add('keenple-fee-deduct-out');
+      setTimeout(function () { node.remove(); }, 200);
+    }
+
     // ── 입장료 예고 애니메이션 (방 입장 시) ─────
     function showFeePendingAnimation(fee) {
+      dismissPendingFee(true);
       var node = document.createElement('div');
       node.className = 'keenple-fee-deduct keenple-fee-pending';
       node.innerHTML =
@@ -618,16 +631,19 @@
           '</div>' +
         '</div>';
       document.body.appendChild(node);
+      _pendingFeeNode = node;
       requestAnimationFrame(() => node.classList.add('keenple-fee-deduct-in'));
       setTimeout(() => {
+        if (_pendingFeeNode !== node) return; // 이미 차감으로 교체됨
         node.classList.remove('keenple-fee-deduct-in');
         node.classList.add('keenple-fee-deduct-out');
-        setTimeout(() => node.remove(), 450);
+        setTimeout(() => { node.remove(); if (_pendingFeeNode === node) _pendingFeeNode = null; }, 450);
       }, 2000);
     }
 
     // ── 입장료 차감 애니메이션 ─────────────────
     function showFeeDeductionAnimation(fee) {
+      dismissPendingFee(true);
       var node = document.createElement('div');
       node.className = 'keenple-fee-deduct';
       node.innerHTML =
