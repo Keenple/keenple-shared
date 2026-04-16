@@ -26,6 +26,13 @@ function createMultiplayerServer(io, options = {}) {
     //   dispatchUpdate(room, response) → main 응답을 플레이어별 eloUpdate 이벤트로 매핑
     //   endpoint → main 측 경로 (기본 '/api/match/result')
     rankMatch = null,
+    // 입장료 종료 시 정산 정책.
+    //   'sink' — 환불 없음 (입장료는 플랫폼 귀속)
+    //   'refund-on-abort' — 기본. endData.aborted === true 일 때만 양쪽 환불
+    //                       (서버/네트워크 오류 등으로 게임이 제대로 진행 못한 경우)
+    //   'refund-all' — 항상 양쪽 환불 (예: 테스트·친선전)
+    //   function(room, endData) → [{role, amount, reason}] — 커스텀
+    payoutPolicy = 'refund-on-abort',
   } = options;
 
   // 입장료 기능 시 wallet-client 지연 로드
@@ -249,7 +256,61 @@ function createMultiplayerServer(io, options = {}) {
         return false;
       }
     }
+    room._hasUnsettledFees = true;
+    room._lastChargedFee = fee;
     return true;
+  }
+
+  // 입장료 정산 (환불/지급) — payoutPolicy에 따라
+  async function processPayout(room, endData) {
+    if (!room._hasUnsettledFees) return;
+    room._hasUnsettledFees = false;   // 중복 실행 방지
+    const feeCharged = room._lastChargedFee || 0;
+    if (feeCharged <= 0) return;
+
+    let payouts = [];
+    if (payoutPolicy === 'sink') {
+      payouts = [];
+    } else if (payoutPolicy === 'refund-on-abort') {
+      if (endData && endData.aborted === true) {
+        payouts = room.players.map(p => ({ role: p.role, amount: feeCharged, reason: 'abort_refund' }));
+      }
+    } else if (payoutPolicy === 'refund-all') {
+      payouts = room.players.map(p => ({ role: p.role, amount: feeCharged, reason: 'refund' }));
+    } else if (typeof payoutPolicy === 'function') {
+      try { payouts = payoutPolicy(room, endData || {}) || []; }
+      catch (e) { console.error('[MP] payoutPolicy 함수 에러:', e.message); payouts = []; }
+    }
+    if (!payouts.length) return;
+
+    const w = getWallet();
+    if (!w) return;
+
+    const seq = room._startSeq || 1;
+    for (const po of payouts) {
+      const p = room.players.find(pp => pp.role === po.role);
+      if (!p || !p.keenpleUserId) continue;
+      const amount = po.amount;
+      if (!amount || amount <= 0) continue;
+      const key = 'payout-' + room.code + '-' + seq + '-' + p.keenpleUserId;
+      try {
+        const result = await w.refund({
+          userId: p.keenpleUserId,
+          currency: 'coin',
+          amount,
+          refType: 'room',
+          refId: room.code,
+          gameId: gameId || 'unknown',
+          reason: po.reason || 'payout',
+          idempotencyKey: key,
+        });
+        if (result && result.ok && p.connected) {
+          io.to(p.socketId).emit('payoutResult', { amount, reason: po.reason, balanceAfter: result.balanceAfter });
+        }
+      } catch (e) {
+        console.error('[MP] payout 에러:', e.message);
+      }
+    }
   }
 
   async function startGame(room) {
@@ -298,8 +359,20 @@ function createMultiplayerServer(io, options = {}) {
     if (room.matched && rankMatch && rankMatch.enabled) {
       reportMatch(room, data).catch(err => console.error('[MP] reportMatch:', err.message));
     }
+    // 입장료 정산 (policy에 따라 환불·지급·sink)
+    if (room._hasUnsettledFees) {
+      processPayout(room, data).catch(err => console.error('[MP] processPayout:', err.message));
+    }
     scheduleRoomCleanup(room.code);
     console.log(`[MP] Game over: ${room.code}`);
+  }
+
+  // 편의 메서드: 서버 오류·강제 중단 시 환불과 함께 종료
+  function abortGame(room, reasonOrData) {
+    const data = typeof reasonOrData === 'string'
+      ? { aborted: true, reason: reasonOrData }
+      : Object.assign({ aborted: true }, reasonOrData || {});
+    endGame(room, data);
   }
 
   // ─── 이벤트 등록 ───────────────────────────────────────────
@@ -667,6 +740,7 @@ function createMultiplayerServer(io, options = {}) {
     // 게임 흐름
     startGame,
     endGame,
+    abortGame,
     reportMatch,
 
     // 이벤트

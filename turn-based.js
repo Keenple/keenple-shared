@@ -645,6 +645,28 @@
       }, 2000);
     }
 
+    // ── 환불 애니메이션 (abort/payout) ─────────
+    function showFeeRefundAnimation(amount) {
+      dismissPendingFee(true);
+      var node = document.createElement('div');
+      node.className = 'keenple-fee-deduct keenple-fee-refund';
+      node.innerHTML =
+        '<div class="keenple-fee-deduct-card keenple-fee-refund-card">' +
+          '<div class="keenple-fee-deduct-icon">🪙</div>' +
+          '<div class="keenple-fee-deduct-text">' +
+            '<div class="keenple-fee-deduct-label">' + t('환불', 'Refunded') + '</div>' +
+            '<div class="keenple-fee-deduct-amount">+' + amount + ' coin</div>' +
+          '</div>' +
+        '</div>';
+      document.body.appendChild(node);
+      requestAnimationFrame(() => node.classList.add('keenple-fee-deduct-in'));
+      setTimeout(() => {
+        node.classList.remove('keenple-fee-deduct-in');
+        node.classList.add('keenple-fee-deduct-out');
+        setTimeout(() => node.remove(), 450);
+      }, 2200);
+    }
+
     // ── 입장료 차감 애니메이션 ─────────────────
     function showFeeDeductionAnimation(fee) {
       dismissPendingFee(true);
@@ -752,6 +774,14 @@
       });
 
       mp.on('gameOver', (data) => handleGameOver(data));
+
+      mp.onServer('payoutResult', (data) => {
+        if (data && data.amount > 0) {
+          showFeeRefundAnimation(data.amount);
+          try { window.dispatchEvent(new CustomEvent('keenple:wallet-changed', { detail: { reason: 'refund', amount: data.amount } })); } catch (e) {}
+          if (Keenple.Wallet && Keenple.Wallet.refresh) { try { Keenple.Wallet.refresh(); } catch (e) {} }
+        }
+      });
 
       mp.onServer('entryFeeError', (data) => {
         lobbyApi && lobbyApi.setStatus && lobbyApi.setStatus({
