@@ -172,10 +172,12 @@ function createMultiplayerServer(io, options = {}) {
     room.gameStarted = true;
     room.gameOver = false;
 
+    const startFee = (room.options && room.options.entryFee != null) ? room.options.entryFee : entryFee;
     const startData = {
       players: room.players.map(p => ({ role: p.role, nickname: p.nickname })),
       gameState: room.gameState,
       options: room.options,
+      entryFee: startFee,
     };
 
     room.players.forEach(p => {

@@ -618,6 +618,16 @@
         if (mp) mp.role = data.yourRole;
         lobbyApi && lobbyApi.showCancel && lobbyApi.showCancel(false);
         startGame('mp', { fromServer: true, gameState: data.gameState, players: data.players });
+        // 입장료 차감 안내 + SDK 잔액 갱신 트리거
+        var fee = (data && data.entryFee) || (data && data.options && data.options.entryFee) || 0;
+        if (fee > 0) {
+          api.showToast({
+            ko: '입장료 ' + fee + ' coin 차감',
+            en: 'Entry fee ' + fee + ' coin deducted',
+          }, { type: 'info' });
+          try { window.dispatchEvent(new CustomEvent('keenple:wallet-changed', { detail: { reason: 'entry_fee', amount: -fee } })); } catch (e) {}
+          if (Keenple.Wallet && Keenple.Wallet.refresh) { try { Keenple.Wallet.refresh(); } catch (e) {} }
+        }
         // MP 기본 타이머 (옵션에 turnTimer 있으면 그 값, 없으면 skip — 서버의 turnTimer 이벤트 기다림)
       });
 
