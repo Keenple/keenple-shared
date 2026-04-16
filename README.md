@@ -2,6 +2,17 @@
 
 Keenple 게임들이 공유하는 공통 모듈.
 
+## 새 게임 이식 담당 (Claude / 개발자) 체크리스트
+
+체스가 v2.2 → v2.10 동안 reference 역할을 하며 같은 영역에서 반복 패치가 나왔습니다. 다음 게임은 이 지점들을 건너뛰세요.
+
+- **경고 무시 금지** — v2.10부터 `validateConfig` · `checkServerConfig` · `isOpponentTurn` 미선언 경고가 콘솔에 나옵니다. warning이 보이면 설정이 빠진 것입니다.
+- **선언만 사용** — `entryFee`, `rankMatch`, `modes.*.undoItem(freeCount 포함)`, `roles`/`roleLabel`, `isOpponentTurn` 는 모두 선언형 옵션으로 제공됩니다. 게임 코드에서 직접 지갑 차감 · DOM 트릭 · buyItem 수동 호출 금지.
+- **mock 경고 체크** — `serverCall 미지정 — mock 모드` 경고가 뜨면 실제 차감이 안 되는 상태입니다. 의도된 경우에만 무시하세요.
+- **AI 모드 주의** — 턴 감지는 `modes.ai.isOpponentTurn(state)` 콜백으로만. `aiSide='black'` 류 하드코딩은 v2.8.1에서 제거됐습니다. 무르기 스택(`undoMax`)은 모드별로 설정 가능, 기본 50.
+- **하드코딩된 역할 금지** — `'white'/'black'/'red'/'blue'` 리터럴 직접 비교 대신 `config.roles` + `config.roleLabel(role)` 사용.
+- **현재 reference** — `체스 게임/` (규칙 기반, 서버 권위 검증). `킨플 알까기/` (물리 기반, 클라 신뢰+merge). 상세 통합 가이드(INTEGRATION_GUIDE.md)는 알까기 이식 이후 v2.11+에서 작성 예정.
+
 ## 설치
 
 각 게임 `package.json`의 `dependencies`에 추가:
