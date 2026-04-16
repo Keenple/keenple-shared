@@ -565,6 +565,46 @@
       if (lobbyApi) { lobbyApi.show(); lobbyApi.setStatus && lobbyApi.setStatus(''); lobbyApi.showCancel && lobbyApi.showCancel(false); }
     }
 
+    // ── 입장 확인 모달 (입장료 > 0 시) ───────────
+    function confirmEntryFee(fee, onConfirm) {
+      var overlay = document.createElement('div');
+      overlay.className = 'keenple-fee-confirm-overlay';
+      overlay.innerHTML =
+        '<div class="keenple-fee-confirm-card">' +
+          '<div class="keenple-fee-confirm-icon">🪙</div>' +
+          '<div class="keenple-fee-confirm-title">' + t('방 입장 확인', 'Join Room?') + '</div>' +
+          '<div class="keenple-fee-confirm-msg">' +
+            t('이 방은 게임 시작 시', 'This room charges') + ' <b>' + fee + ' coin</b> ' + t('차감됩니다.', 'on game start.') +
+          '</div>' +
+          '<div class="keenple-fee-confirm-buttons">' +
+            '<button class="keenple-fee-confirm-ok">' + t('참가', 'Join') + '</button>' +
+            '<button class="keenple-fee-confirm-cancel">' + t('취소', 'Cancel') + '</button>' +
+          '</div>' +
+        '</div>';
+      document.body.appendChild(overlay);
+      var close = function () { overlay.classList.add('keenple-fee-confirm-out'); setTimeout(function(){ overlay.remove(); }, 200); };
+      overlay.querySelector('.keenple-fee-confirm-ok').onclick = function () { close(); onConfirm(); };
+      overlay.querySelector('.keenple-fee-confirm-cancel').onclick = close;
+      overlay.onclick = function (e) { if (e.target === overlay) close(); };
+      requestAnimationFrame(function () { overlay.classList.add('keenple-fee-confirm-in'); });
+    }
+
+    function joinRoomWithConfirm(code, fee) {
+      var doJoin = function () {
+        ensureMp();
+        var tryJ = function (a) {
+          a = a || 0;
+          if (mp.connected) mp.joinRoom(code, getNickname(), getKeenpleUserId());
+          else if (a > 50) return;
+          else setTimeout(function () { tryJ(a + 1); }, 100);
+        };
+        tryJ();
+      };
+      var resolvedFee = fee != null ? fee : defaultEntryFee;
+      if (resolvedFee > 0) confirmEntryFee(resolvedFee, doJoin);
+      else doJoin();
+    }
+
     // ── 입장료 예고 애니메이션 (방 입장 시) ─────
     function showFeePendingAnimation(fee) {
       var node = document.createElement('div');
@@ -887,14 +927,14 @@
         title: GAME_NAME,
         buttons: buildLobbyButtons(),
         joinInput: modes.mp && modes.mp.enabled !== false
-          ? { enabled: true, onJoin: (code) => { ensureMp(); const tryJ = (a=0)=>{ if(mp.connected) mp.joinRoom(code, getNickname(), getKeenpleUserId()); else if(a>50) return; else setTimeout(()=>tryJ(a+1),100); }; tryJ(); } }
+          ? { enabled: true, onJoin: (code) => joinRoomWithConfirm(code, defaultEntryFee) }
           : undefined,
         roomList: modes.mp && modes.mp.enabled !== false
           ? {
               enabled: true,
               fetchRooms: () => fetch('api/rooms').then(r => r.json()).catch(() => []),
               pollInterval: 10000,
-              onRoomClick: (r) => { ensureMp(); const tryJ = (a=0)=>{ if(mp.connected) mp.joinRoom(r.code, getNickname(), getKeenpleUserId()); else if(a>50) return; else setTimeout(()=>tryJ(a+1),100); }; tryJ(); }
+              onRoomClick: (r) => joinRoomWithConfirm(r.code, r.entryFee != null ? r.entryFee : defaultEntryFee),
             }
           : undefined,
         onCancel: () => {
