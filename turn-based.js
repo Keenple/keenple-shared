@@ -831,9 +831,20 @@
     }
 
     // ── Lobby 구성 ────────────────────────────
+    // 한국어 조사 자동 선택 (받침 유무로 은/는, 이/가, 을/를 선택)
+    function josa(word, withBatchim, withoutBatchim) {
+      if (!word) return withBatchim;
+      var last = word.charCodeAt(word.length - 1);
+      if (last >= 0xAC00 && last <= 0xD7A3) {
+        return (last - 0xAC00) % 28 === 0 ? withoutBatchim : withBatchim;
+      }
+      return withBatchim;  // 한글 아니면 기본
+    }
+
     function requireLogin(actionLabel) {
+      var label = actionLabel || '이 기능';
       api.showToast({
-        ko: (actionLabel || '이 기능') + '은 로그인 후 이용 가능합니다',
+        ko: label + josa(label, '은', '는') + ' 로그인 후 이용 가능합니다',
         en: 'Login required — ' + (actionLabel || 'this feature'),
       }, { type: 'info' });
     }
