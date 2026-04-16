@@ -565,6 +565,27 @@
       if (lobbyApi) { lobbyApi.show(); lobbyApi.setStatus && lobbyApi.setStatus(''); lobbyApi.showCancel && lobbyApi.showCancel(false); }
     }
 
+    // ── 입장료 차감 애니메이션 ─────────────────
+    function showFeeDeductionAnimation(fee) {
+      var node = document.createElement('div');
+      node.className = 'keenple-fee-deduct';
+      node.innerHTML =
+        '<div class="keenple-fee-deduct-card">' +
+          '<div class="keenple-fee-deduct-icon">🪙</div>' +
+          '<div class="keenple-fee-deduct-text">' +
+            '<div class="keenple-fee-deduct-label" data-ko="입장료 차감" data-en="Entry Fee Charged">' + t('입장료 차감', 'Entry Fee Charged') + '</div>' +
+            '<div class="keenple-fee-deduct-amount">−' + fee + ' coin</div>' +
+          '</div>' +
+        '</div>';
+      document.body.appendChild(node);
+      requestAnimationFrame(() => node.classList.add('keenple-fee-deduct-in'));
+      setTimeout(() => {
+        node.classList.remove('keenple-fee-deduct-in');
+        node.classList.add('keenple-fee-deduct-out');
+        setTimeout(() => node.remove(), 450);
+      }, 2200);
+    }
+
     if (typeof BackToLobby !== 'undefined') {
       BackToLobby.attach(document.getElementById('keenple-back-to-lobby-btn'), {
         isInProgress: () => !!mode && !gameOver,
@@ -630,13 +651,10 @@
         if (mp) mp.role = data.yourRole;
         lobbyApi && lobbyApi.showCancel && lobbyApi.showCancel(false);
         startGame('mp', { fromServer: true, gameState: data.gameState, players: data.players });
-        // 입장료 차감 안내 + SDK 잔액 갱신 트리거
+        // 입장료 차감 시각적 피드백 + SDK 잔액 갱신 트리거
         var fee = (data && data.entryFee) || (data && data.options && data.options.entryFee) || 0;
         if (fee > 0) {
-          api.showToast({
-            ko: '입장료 ' + fee + ' coin 차감',
-            en: 'Entry fee ' + fee + ' coin deducted',
-          }, { type: 'info' });
+          showFeeDeductionAnimation(fee);
           try { window.dispatchEvent(new CustomEvent('keenple:wallet-changed', { detail: { reason: 'entry_fee', amount: -fee } })); } catch (e) {}
           if (Keenple.Wallet && Keenple.Wallet.refresh) { try { Keenple.Wallet.refresh(); } catch (e) {} }
         }
