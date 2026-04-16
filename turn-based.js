@@ -234,10 +234,57 @@
   // ============================================
   //  Main — createTurnBased
   // ============================================
-  function createTurnBased(config) {
-    if (!config || !config.module || !config.board) {
-      throw new Error('[KeenpleShell] config.module 과 config.board 는 필수입니다');
+  function validateConfig(config) {
+    if (!config) throw new Error('[KeenpleShell] config 인자가 필요합니다');
+    if (typeof config.gameKey !== 'string' || !config.gameKey) {
+      throw new Error('[KeenpleShell] config.gameKey (string) 은 필수입니다');
     }
+    if (!config.module) throw new Error('[KeenpleShell] config.module 은 필수입니다');
+    const modReq = ['createInitialState', 'validateMove', 'applyMove', 'isTerminal'];
+    for (const fn of modReq) {
+      if (typeof config.module[fn] !== 'function') {
+        throw new Error('[KeenpleShell] config.module.' + fn + ' (function) 이 없습니다');
+      }
+    }
+    if (!config.board) throw new Error('[KeenpleShell] config.board 는 필수입니다');
+    if (typeof config.board.mount !== 'function') {
+      throw new Error('[KeenpleShell] config.board.mount (function) 이 없습니다');
+    }
+    const modes = config.modes || {};
+    if (modes.ai && modes.ai.enabled) {
+      if (!Array.isArray(modes.ai.difficulties) || modes.ai.difficulties.length === 0) {
+        throw new Error('[KeenpleShell] modes.ai.difficulties (non-empty array) 가 필요합니다');
+      }
+      if (typeof modes.ai.onOpponentTurn !== 'function') {
+        throw new Error('[KeenpleShell] modes.ai.onOpponentTurn (function) 이 필요합니다');
+      }
+      if (typeof modes.ai.isOpponentTurn !== 'function') {
+        console.warn('[KeenpleShell] modes.ai.isOpponentTurn 미선언 — state.turn 비교 기반 기본 감지가 실패하면 AI가 응답하지 않습니다');
+      }
+    }
+    if (modes.mp && modes.mp.enabled) {
+      const roles = config.roles || modes.mp.roles;
+      if (!Array.isArray(roles) || roles.length < 2) {
+        throw new Error('[KeenpleShell] config.roles 또는 modes.mp.roles (배열, 2개 이상) 가 필요합니다');
+      }
+      if (typeof modes.mp.minPlayers !== 'number' || typeof modes.mp.maxPlayers !== 'number') {
+        console.warn('[KeenpleShell] modes.mp.minPlayers / maxPlayers 미지정 — 서버 기본값을 사용합니다');
+      }
+    }
+    if (Array.isArray(config.options)) {
+      for (const opt of config.options) {
+        if (!opt || typeof opt.id !== 'string') {
+          console.warn('[KeenpleShell] options 항목에 id(string) 누락', opt);
+        }
+      }
+    }
+    if (typeof config.roleLabel !== 'function' && (config.roles || (modes.mp && modes.mp.roles))) {
+      // 권장. 미선언시 역할 문자열이 그대로 UI에 노출됨
+    }
+  }
+
+  function createTurnBased(config) {
+    validateConfig(config);
 
     const GAME_KEY = config.gameKey;
     const GAME_NAME = config.gameName || { ko: GAME_KEY, en: GAME_KEY };
@@ -250,20 +297,55 @@
       if (modes.local && typeof modes.local.undoMax === 'number') return modes.local.undoMax;
       return 50;
     }
+    function getRolesDef() {
+      return config.roles || (modes.mp && modes.mp.roles) || null;
+    }
+    function getRoleLabel(role) {
+      if (typeof config.roleLabel === 'function') {
+        try {
+          const l = config.roleLabel(role);
+          if (l && typeof l.ko === 'string' && typeof l.en === 'string') return l;
+        } catch (e) { console.warn('[KeenpleShell] roleLabel 호출 실패', e); }
+      }
+      return { ko: String(role), en: String(role) };
+    }
     const defaultEntryFee = config.entryFee || 0;
-    let _feeMismatchWarned = false;
     let _mockPurchaseWarned = false;
     let _aiSideWarned = false;
-    function checkFeeMismatch(serverFee, context) {
-      if (_feeMismatchWarned) return;
-      if (serverFee == null) return;
-      if (serverFee !== defaultEntryFee) {
-        _feeMismatchWarned = true;
+    const _mismatchWarned = {};
+    function checkOptionMismatch(key, clientValue, serverValue, context) {
+      if (_mismatchWarned[key]) return;
+      if (serverValue === undefined) return;
+      if (clientValue !== serverValue) {
+        _mismatchWarned[key] = true;
         console.warn(
-          '[KeenpleShell] entryFee 설정 불일치 — 클라: ' + defaultEntryFee + ', 서버: ' + serverFee +
-          ' (' + context + '). 서버 값을 신뢰하지만 양쪽 config를 맞추세요.'
+          '[KeenpleShell] ' + key + ' 설정 불일치 — 클라: ' + JSON.stringify(clientValue) +
+          ', 서버: ' + JSON.stringify(serverValue) + ' (' + context + '). 서버 값을 신뢰하지만 양쪽 config를 맞추세요.'
         );
       }
+    }
+    function checkFeeMismatch(serverFee, context) {
+      if (serverFee == null) return;
+      checkOptionMismatch('entryFee', defaultEntryFee, serverFee, context);
+    }
+    function checkServerConfig(serverConfig, context) {
+      if (!serverConfig) return;
+      if ('entryFee' in serverConfig) checkOptionMismatch('entryFee', defaultEntryFee, serverConfig.entryFee, context);
+      const clientRankMatch = !!(modes.mp && modes.mp.rankMatch);
+      if ('rankMatch' in serverConfig) checkOptionMismatch('rankMatch', clientRankMatch, !!serverConfig.rankMatch, context);
+    }
+
+    const _shellListeners = [];
+    function addShellListener(target, event, handler, opts) {
+      target.addEventListener(event, handler, opts);
+      _shellListeners.push({ target: target, event: event, handler: handler, opts: opts });
+      return handler;
+    }
+    function removeShellListeners() {
+      for (const l of _shellListeners) {
+        try { l.target.removeEventListener(l.event, l.handler, l.opts); } catch (e) {}
+      }
+      _shellListeners.length = 0;
     }
 
     // ── State ─────────────────────────────────
@@ -380,8 +462,13 @@
     // ── HUD 초기화/업데이트 ─────────────────
     function ensureHud(data) {
       if (hud) return;
+      if (mode !== 'mp' && mode !== 'spectator') return;
+      const rolesDef = getRolesDef();
+      if (!rolesDef) {
+        console.warn('[KeenpleShell] HUD 렌더 skip — config.roles 또는 modes.mp.roles 필요');
+        return;
+      }
       const players = (data && data.players) || [];
-      const rolesDef = (modes.mp && modes.mp.roles) || ['white', 'black'];
       const hudPlayers = rolesDef.map(role => {
         const p = players.find(pp => pp.role === role) || {};
         const isMe = mode === 'mp' && myRole === role;
@@ -605,7 +692,6 @@
     function computeGameOverCfg(result) {
       const isMe = (mode === 'mp' && myRole) ? (result.winner === myRole) : null;
       const extra = result || {};
-      const rolesDef = (modes.mp && modes.mp.roles) || ['white', 'black'];
       let title = { ko: '게임 종료', en: 'Game Over' };
       let resultStr = 'info';
 
@@ -626,8 +712,8 @@
         }
       } else {
         if (extra.winner) {
-          const winnerLabel = rolesDef.indexOf(extra.winner) === 0 ? { ko: '선공', en: 'First' } : { ko: '후공', en: 'Second' };
-          title = { ko: winnerLabel.ko + ' 승리', en: winnerLabel.en + ' wins' };
+          const label = getRoleLabel(extra.winner);
+          title = { ko: label.ko + ' 승리', en: label.en + ' wins' };
         } else {
           title = { ko: '무승부', en: 'Draw' };
         }
@@ -957,6 +1043,7 @@
 
       mp.on('roomCreated', (data) => {
         myRole = data.role;
+        checkServerConfig(data.serverConfig, 'roomCreated');
         checkFeeMismatch(data.entryFee, 'roomCreated');
         var feeText = '';
         if (data.entryFee > 0) feeText = ' (' + t('입장료: ' + data.entryFee + ' coin', 'Entry Fee: ' + data.entryFee + ' coin') + ')';
@@ -989,6 +1076,7 @@
           return;
         }
         var jFee = (data && data.entryFee) || (data && data.options && data.options.entryFee) || 0;
+        checkServerConfig(data && data.serverConfig, 'roomJoined');
         checkFeeMismatch(data && data.entryFee, 'roomJoined');
         if (jFee > 0) {
           showFeePendingAnimation(jFee);
@@ -1016,10 +1104,11 @@
         startGame('mp', { fromServer: true, gameState: data.gameState, players: data.players });
         // 입장료 차감 시각적 피드백 + SDK 잔액 갱신 트리거
         var fee = (data && data.entryFee) || (data && data.options && data.options.entryFee) || 0;
+        checkServerConfig(data && data.serverConfig, 'gameStart');
         checkFeeMismatch(data && data.entryFee, 'gameStart');
         if (fee > 0) {
           showFeeDeductionAnimation(fee);
-          try { window.dispatchEvent(new CustomEvent('keenple:wallet-changed', { detail: { reason: 'entry_fee', amount: -fee } })); } catch (e) {}
+          try { window.dispatchEvent(new CustomEvent('keenple:wallet-changed', { detail: { reason: 'entry_fee', amount: -fee, mock: false } })); } catch (e) {}
           if (Keenple.Wallet && Keenple.Wallet.refresh) { try { Keenple.Wallet.refresh(); } catch (e) {} }
         }
         // MP 기본 타이머 (옵션에 turnTimer 있으면 그 값, 없으면 skip — 서버의 turnTimer 이벤트 기다림)
@@ -1030,7 +1119,7 @@
       mp.onServer('payoutResult', (data) => {
         if (data && data.amount > 0) {
           showFeeRefundAnimation(data.amount);
-          try { window.dispatchEvent(new CustomEvent('keenple:wallet-changed', { detail: { reason: 'refund', amount: data.amount } })); } catch (e) {}
+          try { window.dispatchEvent(new CustomEvent('keenple:wallet-changed', { detail: { reason: 'refund', amount: data.amount, mock: false } })); } catch (e) {}
           if (Keenple.Wallet && Keenple.Wallet.refresh) { try { Keenple.Wallet.refresh(); } catch (e) {} }
         }
       });
@@ -1323,7 +1412,7 @@
       // 코인 잔액 초기 조회 + 변화 이벤트 구독
       if (defaultEntryFee > 0) {
         refreshCoinBalance();
-        window.addEventListener('keenple:wallet-changed', (e) => {
+        addShellListener(window, 'keenple:wallet-changed', (e) => {
           if (e && e.detail && e.detail.mock) return;
           refreshCoinBalance();
         });
@@ -1366,7 +1455,7 @@
       } catch (e) { showShellError('reconnect-check', e); }
     }
 
-    window.addEventListener('keenple:langchange', () => {
+    addShellListener(window, 'keenple:langchange', () => {
       try { if (state && config.board.render) config.board.render(state, api); }
       catch (e) { showShellError('langchange-render', e); }
     });
@@ -1376,15 +1465,21 @@
       if (mode !== 'mp' || gameOver || !mp || !mp.surrender) return;
       try { mp.surrender(); } catch (e) {}
     }
-    window.addEventListener('beforeunload', tryAutoSurrender);
-    window.addEventListener('pagehide', tryAutoSurrender);  // 모바일 safari 등
+    addShellListener(window, 'beforeunload', tryAutoSurrender);
+    addShellListener(window, 'pagehide', tryAutoSurrender);  // 모바일 safari 등
 
     bootstrap().catch(e => showShellError('bootstrap', e));
+
+    function destroy() {
+      try { backToLobby(); } catch (e) {}
+      removeShellListeners();
+    }
 
     return {
       getState: () => state,
       getMode: () => mode,
       backToLobby,
+      destroy,
       _api: api,
     };
   }

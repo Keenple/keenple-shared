@@ -313,6 +313,17 @@ function createMultiplayerServer(io, options = {}) {
     }
   }
 
+  function buildServerConfig(room) {
+    const fee = (room && room.options && room.options.entryFee != null) ? room.options.entryFee : entryFee;
+    return {
+      entryFee: fee,
+      rankMatch: !!(rankMatch && rankMatch.enabled),
+      payoutPolicy: typeof payoutPolicy === 'function' ? 'custom' : payoutPolicy,
+      minPlayers,
+      maxPlayers,
+    };
+  }
+
   async function startGame(room) {
     if (room._idleTimer) { clearTimeout(room._idleTimer); room._idleTimer = null; }
 
@@ -329,6 +340,7 @@ function createMultiplayerServer(io, options = {}) {
       gameState: room.gameState,
       options: room.options,
       entryFee: startFee,
+      serverConfig: buildServerConfig(room),
     };
 
     room.players.forEach(p => {
@@ -454,6 +466,7 @@ function createMultiplayerServer(io, options = {}) {
         minPlayers,
         maxPlayers,
         entryFee: roomFee,
+        serverConfig: buildServerConfig(room),
       };
 
       socket.emit('roomCreated', response);
@@ -522,6 +535,7 @@ function createMultiplayerServer(io, options = {}) {
           gameState: room.gameState,
           options: room.options,
           entryFee: rcFee,
+          serverConfig: buildServerConfig(room),
           players: room.players.map(p => ({ role: p.role, nickname: p.nickname, connected: p.connected })),
         };
 
@@ -556,6 +570,7 @@ function createMultiplayerServer(io, options = {}) {
           reconnected: false,
           options: room.options,
           entryFee: jFee,
+          serverConfig: buildServerConfig(room),
           players: room.players.map(p => ({ role: p.role, nickname: p.nickname, connected: p.connected })),
         };
 
@@ -595,6 +610,7 @@ function createMultiplayerServer(io, options = {}) {
           gameOver: room.gameOver,
           gameState: room.gameState,
           options: room.options,
+          serverConfig: buildServerConfig(room),
           players: room.players.map(p => ({ role: p.role, nickname: p.nickname, connected: p.connected })),
         };
 
