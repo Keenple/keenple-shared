@@ -835,8 +835,7 @@
       api.showToast({
         ko: (actionLabel || '이 기능') + '은 로그인 후 이용 가능합니다',
         en: 'Login required — ' + (actionLabel || 'this feature'),
-      }, { type: 'error' });
-      Keenple.login && Keenple.login(window.location.href);
+      }, { type: 'info' });
     }
 
     function buildLobbyButtons() {
@@ -921,11 +920,7 @@
 
     function handleRankMatch() {
       if (!modes.mp || !modes.mp.rankMatch) return;
-      if (!getKeenpleUserId()) {
-        api.showToast({ ko: '랭크 매칭은 로그인 후 이용 가능합니다', en: 'Login required for ranked match' }, { type: 'error' });
-        Keenple.login && Keenple.login(window.location.href);
-        return;
-      }
+      if (!getKeenpleUserId()) { requireLogin('랭크 매칭'); return; }
       if (defaultEntryFee > 0 && _coinBalance != null && _coinBalance < defaultEntryFee) {
         showInsufficientCoinsModal(defaultEntryFee, _coinBalance);
         return;
