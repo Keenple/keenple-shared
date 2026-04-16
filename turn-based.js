@@ -521,11 +521,20 @@
     }
 
     // ── Undo ──────────────────────────────────
-    function performUndoInternal() {
-      if (!undoStack.size() || gameOver) return;
+    function popOnce() {
       const prev = undoStack.pop();
       state = (typeof prev === 'string' && MOD.deserialize) ? MOD.deserialize(prev) : prev;
       currentTurn = state.currentTurn || state.turn;
+    }
+    function performUndoInternal() {
+      if (!undoStack.size() || gameOver) return;
+      popOnce();
+      // AI 모드: "내가 다시 둘 수 있는 상태"까지 반복 pop (AI half-move도 되감기)
+      if (mode === 'ai' && modes.ai && modes.ai.onOpponentTurn) {
+        while (undoStack.size() && isAiTurn(state)) popOnce();
+        // 엣지: 스택 소진 후에도 AI 턴이면 (예: AI 선공 직후) AI에게 돌려줌 → 화면 얼음 방지
+        if (isAiTurn(state)) setTimeout(triggerAiMove, 300);
+      }
       if (config.board.render) config.board.render(state, api);
       updateHudTurn();
       if (!undoStack.size()) undoBtn.disabled = true;
