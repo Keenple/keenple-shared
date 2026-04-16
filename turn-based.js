@@ -601,6 +601,10 @@
         tryJ();
       };
       var resolvedFee = fee != null ? fee : defaultEntryFee;
+      if (resolvedFee > 0 && _coinBalance != null && _coinBalance < resolvedFee) {
+        showInsufficientCoinsModal(resolvedFee, _coinBalance);
+        return;
+      }
       if (resolvedFee > 0) confirmEntryFee(resolvedFee, doJoin);
       else doJoin();
     }
@@ -865,6 +869,10 @@
     }
 
     function openRoomOptions(type) {
+      if (defaultEntryFee > 0 && _coinBalance != null && _coinBalance < defaultEntryFee) {
+        showInsufficientCoinsModal(defaultEntryFee, _coinBalance);
+        return;
+      }
       if (lobbyApi) lobbyApi.hide();
       const mount = document.getElementById('keenple-room-options');
       mount.style.display = '';
@@ -896,6 +904,10 @@
         Keenple.login && Keenple.login(window.location.href);
         return;
       }
+      if (defaultEntryFee > 0 && _coinBalance != null && _coinBalance < defaultEntryFee) {
+        showInsufficientCoinsModal(defaultEntryFee, _coinBalance);
+        return;
+      }
       ensureMp();
       if (Keenple.Match && Keenple.Match.findGame) {
         activeMatch = Keenple.Match.findGame({
@@ -924,8 +936,55 @@
     }
 
     let _nickname = null, _userId = null;
+    let _coinBalance = null;  // null = 아직 모름 (낙관적 허용)
     function getNickname() { return _nickname; }
     function getKeenpleUserId() { return _userId; }
+
+    async function refreshCoinBalance() {
+      if (!_userId) { _coinBalance = null; return; }
+      try {
+        if (Keenple.Wallet && Keenple.Wallet.get) {
+          const w = await Keenple.Wallet.get();
+          _coinBalance = (w && (w.coin != null ? w.coin : w.coinBalance)) || 0;
+          return;
+        }
+        const res = await fetch('/api/wallet', { credentials: 'include' });
+        if (!res.ok) return;
+        const w = await res.json();
+        _coinBalance = (w.coin != null ? w.coin : w.coinBalance) || 0;
+      } catch (e) {}
+    }
+
+    // 코인 충분한 경우에만 onOk 실행. 부족하면 안내 모달.
+    function ensureEnoughCoin(required, onOk) {
+      if (!required || required <= 0) { onOk(); return; }
+      if (_coinBalance == null) { onOk(); return; }  // 잔액 미확인 → 낙관적 허용 (서버가 최종 방어)
+      if (_coinBalance >= required) { onOk(); return; }
+      showInsufficientCoinsModal(required, _coinBalance);
+    }
+
+    function showInsufficientCoinsModal(required, current) {
+      var overlay = document.createElement('div');
+      overlay.className = 'keenple-fee-confirm-overlay keenple-fee-insufficient';
+      overlay.innerHTML =
+        '<div class="keenple-fee-confirm-card">' +
+          '<div class="keenple-fee-confirm-icon">🪙</div>' +
+          '<div class="keenple-fee-confirm-title">' + t('코인 부족', 'Not Enough Coins') + '</div>' +
+          '<div class="keenple-fee-confirm-msg">' +
+            t('입장료', 'Entry fee') + ' <b>' + required + ' coin</b>' +
+            t('이 필요합니다.', ' required.') + '<br>' +
+            t('현재 보유', 'You have') + ': <b>' + current + ' coin</b>' +
+          '</div>' +
+          '<div class="keenple-fee-confirm-buttons">' +
+            '<button class="keenple-fee-confirm-cancel">' + t('확인', 'OK') + '</button>' +
+          '</div>' +
+        '</div>';
+      document.body.appendChild(overlay);
+      var close = function () { overlay.classList.add('keenple-fee-confirm-out'); setTimeout(function () { overlay.remove(); }, 200); };
+      overlay.querySelector('.keenple-fee-confirm-cancel').onclick = close;
+      overlay.onclick = function (e) { if (e.target === overlay) close(); };
+      requestAnimationFrame(function () { overlay.classList.add('keenple-fee-confirm-in'); });
+    }
 
     // ── 부트스트랩 ────────────────────────────
     async function bootstrap() {
@@ -936,6 +995,12 @@
         const user = await Keenple.getUser();
         if (user) { _nickname = user.nickname; _userId = user.id; }
       } catch (e) { showShellError('bootstrap-prechecks', e); }
+
+      // 코인 잔액 초기 조회 + 변화 이벤트 구독
+      if (defaultEntryFee > 0) {
+        refreshCoinBalance();
+        window.addEventListener('keenple:wallet-changed', () => { refreshCoinBalance(); });
+      }
 
       try {
       lobbyApi = Keenple.UI.Lobby({
