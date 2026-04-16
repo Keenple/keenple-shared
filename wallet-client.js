@@ -78,18 +78,8 @@ function refund(opts) {
   }, opts.idempotencyKey);
 }
 
-// 충전/지급 (관리자·테스트용).
-function grant(opts) {
-  return postJson('/api/internal/wallet/grant', {
-    userId: opts.userId,
-    currency: opts.currency,
-    amount: opts.amount,
-    type: opts.type || 'admin_grant',
-    adminUserId: opts.adminUserId,
-    reason: opts.reason,
-    meta: opts.meta,
-  }, opts.idempotencyKey);
-}
+// grant는 관리자 전용 (/api/admin/wallet/adjust). 게임 서버에서 충전 불가 (보안).
+// 테스트 시에는 관리자 계정으로 admin 페이지(https://keenple.com/admin/wallet.html)에서 수동 충전.
 
 // ── 인벤토리 ────────────────────────────────
 
@@ -130,7 +120,6 @@ function syncCatalog(gameId, items) {
 module.exports = {
   spend: spend,
   refund: refund,
-  grant: grant,
   getInventory: getInventory,
   addInventory: addInventory,
   consumeInventory: consumeInventory,
