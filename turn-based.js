@@ -833,7 +833,8 @@
     // ── Lobby 구성 ────────────────────────────
     function buildLobbyButtons() {
       const buttons = [];
-      if (modes.mp && modes.mp.enabled !== false) {
+      const loggedIn = !!_userId;
+      if (loggedIn && modes.mp && modes.mp.enabled !== false) {
         const createLabel = defaultEntryFee > 0
           ? { ko: '방 만들기 · ' + defaultEntryFee + ' coin', en: 'Create Room · ' + defaultEntryFee + ' coin' }
           : { ko: '방 만들기', en: 'Create Room' };
@@ -1007,10 +1008,10 @@
         mount: '#lobby-mount',
         title: GAME_NAME,
         buttons: buildLobbyButtons(),
-        joinInput: modes.mp && modes.mp.enabled !== false
+        joinInput: (_userId && modes.mp && modes.mp.enabled !== false)
           ? { enabled: true, onJoin: (code) => joinRoomWithConfirm(code, defaultEntryFee) }
           : undefined,
-        roomList: modes.mp && modes.mp.enabled !== false
+        roomList: (_userId && modes.mp && modes.mp.enabled !== false)
           ? {
               enabled: true,
               fetchRooms: () => fetch('api/rooms').then(r => r.json()).catch(() => []),
