@@ -279,6 +279,7 @@
     let timerInterval = null;
     let activeMatch = null;
     const undoStack = createUndoStack(undoMax);
+    let undoUsedCount = 0;
 
     // ── DOM 주입 ─────────────────────────────
     const dom = mountStandardDom();
@@ -413,6 +414,8 @@
       gameOver = false;
       gameOverState = null;
       undoStack.clear();
+      undoUsedCount = 0;
+      updateUndoBtnLabel();
 
       if (extras.gameState) {
         state = (typeof extras.gameState === 'string' && MOD.deserialize) ? MOD.deserialize(extras.gameState) : extras.gameState;
@@ -508,22 +511,54 @@
       updateHudTurn();
       if (!undoStack.size()) undoBtn.disabled = true;
     }
+    function currentUndoItem() {
+      const modeConfig = modes && modes[mode];
+      return modeConfig && modeConfig.undoItem || null;
+    }
+    function updateUndoBtnLabel() {
+      const item = currentUndoItem();
+      if (!item) {
+        undoBtn.textContent = t('되돌리기', 'Undo');
+        undoBtn.setAttribute('data-ko', '되돌리기');
+        undoBtn.setAttribute('data-en', 'Undo');
+        return;
+      }
+      const freeCount = item.freeCount || 0;
+      const remaining = Math.max(0, freeCount - undoUsedCount);
+      const currency = item.currency || 'coin';
+      if (remaining > 0) {
+        const ko = '무르기 (무료 ' + remaining + ')';
+        const en = 'Undo (' + remaining + ' free)';
+        undoBtn.textContent = t(ko, en);
+        undoBtn.setAttribute('data-ko', ko); undoBtn.setAttribute('data-en', en);
+      } else if (item.price > 0) {
+        const ko = '무르기 (' + item.price + ' ' + currency + ')';
+        const en = 'Undo (' + item.price + ' ' + currency + ')';
+        undoBtn.textContent = t(ko, en);
+        undoBtn.setAttribute('data-ko', ko); undoBtn.setAttribute('data-en', en);
+      } else {
+        undoBtn.textContent = t('되돌리기', 'Undo');
+        undoBtn.setAttribute('data-ko', '되돌리기');
+        undoBtn.setAttribute('data-en', 'Undo');
+      }
+    }
     undoBtn.addEventListener('click', () => {
       if (!undoStack.size() || gameOver) return;
-      // 현재 모드에 undoItem 설정이 있으면 유료 구매 플로우로 분기
-      const modeConfig = modes && modes[mode];
-      const undoItem = modeConfig && modeConfig.undoItem;
-      if (undoItem && undoItem.price > 0) {
+      const undoItem = currentUndoItem();
+      const freeCount = (undoItem && undoItem.freeCount) || 0;
+      const paidMode = undoItem && undoItem.price > 0 && undoUsedCount >= freeCount;
+      if (paidMode) {
         purchaseItem({
           itemId: undoItem.itemId || (GAME_KEY + '_undo'),
           name: undoItem.name || { ko: '무르기 1회', en: 'Undo 1 move' },
           price: undoItem.price,
           currency: undoItem.currency || 'coin',
           serverCall: undoItem.serverCall,
-          onSuccess: performUndoInternal,
+          onSuccess: () => { performUndoInternal(); undoUsedCount++; updateUndoBtnLabel(); },
         });
       } else {
         performUndoInternal();
+        if (undoItem) { undoUsedCount++; updateUndoBtnLabel(); }
       }
     });
 
@@ -607,6 +642,7 @@
       mode = null; myRole = null; gameOver = false; state = null;
       matchEloInfo = null; pendingEloUpdate = null;
       undoStack.clear();
+      undoUsedCount = 0;
       dom.gameArea.style.display = 'none';
       spectatorBanner.style.display = 'none';
       disconnectOverlay.style.display = 'none';
