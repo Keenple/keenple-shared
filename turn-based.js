@@ -247,6 +247,18 @@
     const hooks = config.hooks || {};
     const undoMax = (modes.local && modes.local.undoMax) || 5;
     const defaultEntryFee = config.entryFee || 0;
+    let _feeMismatchWarned = false;
+    function checkFeeMismatch(serverFee, context) {
+      if (_feeMismatchWarned) return;
+      if (serverFee == null) return;
+      if (serverFee !== defaultEntryFee) {
+        _feeMismatchWarned = true;
+        console.warn(
+          '[KeenpleShell] entryFee 설정 불일치 — 클라: ' + defaultEntryFee + ', 서버: ' + serverFee +
+          ' (' + context + '). 서버 값을 신뢰하지만 양쪽 config를 맞추세요.'
+        );
+      }
+    }
 
     // ── State ─────────────────────────────────
     let state = null;
@@ -708,6 +720,7 @@
 
       mp.on('roomCreated', (data) => {
         myRole = data.role;
+        checkFeeMismatch(data.entryFee, 'roomCreated');
         var feeText = '';
         if (data.entryFee > 0) feeText = ' (' + t('입장료: ' + data.entryFee + ' coin', 'Entry Fee: ' + data.entryFee + ' coin') + ')';
         lobbyApi && lobbyApi.setStatus && lobbyApi.setStatus({
@@ -739,6 +752,7 @@
           return;
         }
         var jFee = (data && data.entryFee) || (data && data.options && data.options.entryFee) || 0;
+        checkFeeMismatch(data && data.entryFee, 'roomJoined');
         if (jFee > 0) {
           showFeePendingAnimation(jFee);
           lobbyApi && lobbyApi.setStatus && lobbyApi.setStatus({
@@ -765,6 +779,7 @@
         startGame('mp', { fromServer: true, gameState: data.gameState, players: data.players });
         // 입장료 차감 시각적 피드백 + SDK 잔액 갱신 트리거
         var fee = (data && data.entryFee) || (data && data.options && data.options.entryFee) || 0;
+        checkFeeMismatch(data && data.entryFee, 'gameStart');
         if (fee > 0) {
           showFeeDeductionAnimation(fee);
           try { window.dispatchEvent(new CustomEvent('keenple:wallet-changed', { detail: { reason: 'entry_fee', amount: -fee } })); } catch (e) {}
