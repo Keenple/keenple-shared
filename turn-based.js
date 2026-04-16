@@ -248,6 +248,7 @@
     const undoMax = (modes.local && modes.local.undoMax) || 5;
     const defaultEntryFee = config.entryFee || 0;
     let _feeMismatchWarned = false;
+    let _mockPurchaseWarned = false;
     function checkFeeMismatch(serverFee, context) {
       if (_feeMismatchWarned) return;
       if (serverFee == null) return;
@@ -324,16 +325,21 @@
         gameNotice.textContent = typeof msg === 'string' ? msg : (msg[Keenple.getLang && Keenple.getLang()] || msg.ko || msg.en);
         gameNotice.style.display = '';
       },
-      // 아이템 즉시 구매 (게임 중 힌트·무르기 등 소비형).
+      // 아이템 즉시 구매 (힌트·스킨 등 게임 고유 소비형).
       //   opts: {
-      //     itemId:  'chess_undo_1',              // 로그/idempotency용
-      //     name:    { ko:'무르기', en:'Undo' },
-      //     price:   5,                            // coin
-      //     confirm: true,                         // 구매 확인 모달 (기본 true)
-      //     serverCall: async () => ({ ok:true }), // 실제 차감 호출. 생략 시 mock(클라만 감산)
-      //     onSuccess: () => { ... },              // 구매 성공 → 효과 발동
-      //     onCancel:  () => { ... },              // 선택
+      //     itemId:   'chess_hint_1',
+      //     name:     { ko:'힌트', en:'Hint' },
+      //     price:    5,
+      //     currency: 'coin' | 'keen',              // 기본 'coin'
+      //     confirm:  true,                          // 구매 확인 모달 (기본 true)
+      //     serverCall: async () => ({ ok:true }),   // 실제 차감 호출. 생략 시 mock(클라만 감산, 새로고침 시 원복)
+      //     onSuccess: () => { ... },                // 구매 성공 → 효과 발동
+      //     onCancel:  () => { ... },                // 선택
       //   }
+      //
+      // ⚠ 무르기(undo)는 shared가 이미 기본 버튼과 리스너를 달고 있음.
+      //   유료 무르기는 여기서 buyItem을 직접 호출하지 말고,
+      //   createTurnBased config의 modes.{local|ai}.undoItem 에 선언할 것.
       buyItem: (opts) => purchaseItem(opts),
       // 표준 아이템 구매 버튼 DOM 생성. 게임이 반환값을 원하는 위치에 appendChild.
       //   opts: buyItem의 opts 전부 + { icon?: '↩️' | HTMLElement, className?: '' }
@@ -493,7 +499,7 @@
     }
 
     // ── Undo ──────────────────────────────────
-    undoBtn.addEventListener('click', () => {
+    function performUndoInternal() {
       if (!undoStack.size() || gameOver) return;
       const prev = undoStack.pop();
       state = (typeof prev === 'string' && MOD.deserialize) ? MOD.deserialize(prev) : prev;
@@ -501,6 +507,24 @@
       if (config.board.render) config.board.render(state, api);
       updateHudTurn();
       if (!undoStack.size()) undoBtn.disabled = true;
+    }
+    undoBtn.addEventListener('click', () => {
+      if (!undoStack.size() || gameOver) return;
+      // 현재 모드에 undoItem 설정이 있으면 유료 구매 플로우로 분기
+      const modeConfig = modes && modes[mode];
+      const undoItem = modeConfig && modeConfig.undoItem;
+      if (undoItem && undoItem.price > 0) {
+        purchaseItem({
+          itemId: undoItem.itemId || (GAME_KEY + '_undo'),
+          name: undoItem.name || { ko: '무르기 1회', en: 'Undo 1 move' },
+          price: undoItem.price,
+          currency: undoItem.currency || 'coin',
+          serverCall: undoItem.serverCall,
+          onSuccess: performUndoInternal,
+        });
+      } else {
+        performUndoInternal();
+      }
     });
 
     // ── Surrender ─────────────────────────────
@@ -781,6 +805,10 @@
           }
         } else {
           // mock — 클라 잔액만 감산 (실 서버 연결은 게임이 serverCall에 구현)
+          if (!_mockPurchaseWarned) {
+            _mockPurchaseWarned = true;
+            console.warn('[KeenpleShell] buyItem: serverCall 미지정 — mock 모드로 클라 잔액만 감산. 새로고침 시 원복됨. 실제 차감은 serverCall 구현 필요.');
+          }
           var curBal = getBalance(currency);
           if (curBal != null && price > 0) setBalanceLocal(currency, Math.max(0, curBal - price));
         }
