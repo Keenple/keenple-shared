@@ -1,6 +1,6 @@
 {
   "name": "@keenple/shared",
-  "version": "2.0.0-alpha.15",
+  "version": "2.1.0",
   "description": "Keenple 게임들의 공통 모듈 · 카테고리별 Game Shell (v2.0+)",
   "repository": {
     "type": "git",
@@ -14,7 +14,8 @@
     "./back-to-lobby.js": "./back-to-lobby.js",
     "./back-to-lobby.css": "./back-to-lobby.css",
     "./turn-based.js": "./turn-based.js",
-    "./turn-based.css": "./turn-based.css"
+    "./turn-based.css": "./turn-based.css",
+    "./wallet-client": "./wallet-client.js"
   },
   "files": [
     "server-mp.js",
@@ -24,7 +25,8 @@
     "turn-based.js",
     "turn-based.css",
     "README.md",
-    "SHELL_DESIGN.md"
+    "SHELL_DESIGN.md",
+    "wallet-client.js"
   ],
   "license": "UNLICENSED",
   "private": true
