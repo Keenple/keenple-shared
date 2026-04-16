@@ -249,6 +249,7 @@
     const defaultEntryFee = config.entryFee || 0;
     let _feeMismatchWarned = false;
     let _mockPurchaseWarned = false;
+    let _aiSideWarned = false;
     function checkFeeMismatch(serverFee, context) {
       if (_feeMismatchWarned) return;
       if (serverFee == null) return;
@@ -463,9 +464,28 @@
 
       // AI 모드 선공 체크
       if (mode === 'ai' && modes.ai && modes.ai.onOpponentTurn) {
-        const aiSide = extras.aiSide || state.aiSide || 'black';
-        if (currentTurn === aiSide) setTimeout(triggerAiMove, 200);
+        if (isAiTurn(state, extras)) setTimeout(triggerAiMove, 200);
       }
+    }
+
+    // AI 턴 판정. 게임이 isOpponentTurn 콜백 제공 시 그걸 우선.
+    // 레거시 폴백: aiSide 문자열과 state.turn/currentTurn 동등 비교.
+    function isAiTurn(st, extras) {
+      if (!modes.ai) return false;
+      if (typeof modes.ai.isOpponentTurn === 'function') {
+        try { return !!modes.ai.isOpponentTurn(st); }
+        catch (e) { console.error('[shell] modes.ai.isOpponentTurn 에러', e); return false; }
+      }
+      const aiSide = (extras && extras.aiSide) || (st && st.aiSide) || modes.ai.aiSide;
+      if (aiSide == null) {
+        if (!_aiSideWarned) {
+          _aiSideWarned = true;
+          console.warn('[KeenpleShell] modes.ai.isOpponentTurn(state) 또는 modes.ai.aiSide 미선언 — AI 턴 감지 불가. game.js에서 선언 필요.');
+        }
+        return false;
+      }
+      const turn = (st && (st.currentTurn != null ? st.currentTurn : st.turn));
+      return turn === aiSide;
     }
 
     // ── Local/AI에서 move 적용 ────────────────
@@ -487,8 +507,7 @@
       if (term.terminal) { handleGameOver(term); return true; }
 
       if (mode === 'ai' && modes.ai && modes.ai.onOpponentTurn) {
-        const aiSide = state.aiSide || 'black';
-        if (currentTurn === aiSide) setTimeout(triggerAiMove, 300);
+        if (isAiTurn(state)) setTimeout(triggerAiMove, 300);
       }
       return true;
     }
