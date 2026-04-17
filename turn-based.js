@@ -338,6 +338,26 @@
       }
     }
 
+    // Catalog 가격 단일 소스: opts(게임 선언)에 main DB 가격을 덮어쓴다.
+    // Catalog 미존재/캐시 미스 시 opts 그대로 반환 (fallback).
+    function resolveItemFromCatalog(opts) {
+      if (!opts || !opts.itemId) return opts;
+      if (typeof Keenple === 'undefined' || !Keenple.Catalog) return opts;
+      const cat = Keenple.Catalog.get(opts.itemId);
+      if (!cat) return opts;
+      const out = Object.assign({}, opts);
+      if (cat.price && cat.price.amount != null) out.price = cat.price.amount;
+      if (cat.price && cat.price.currency) out.currency = cat.price.currency;
+      if (cat.name) out.name = cat.name;
+      return out;
+    }
+    function hasPaidItems(modeName) {
+      const m = modes[modeName];
+      if (!m) return false;
+      if (m.undoItem && m.undoItem.price > 0) return true;
+      return false;
+    }
+
     const _shellListeners = [];
     function addShellListener(target, event, handler, opts) {
       target.addEventListener(event, handler, opts);
@@ -501,8 +521,19 @@
 
     // ── 게임 시작 / 전환 ─────────────────────
     async function startGame(startMode, extras) {
-      mode = startMode;
       extras = extras || {};
+      // Catalog gating: 유료 아이템 있는 모드는 main 가격 로드 실패 시 시작 차단.
+      // Catalog SDK 미존재 환경(구버전 main, SDK 미로드)은 그대로 진행 → config fallback.
+      if (hasPaidItems(startMode) && typeof Keenple !== 'undefined' && Keenple.Catalog) {
+        try {
+          await Keenple.Catalog.load(config.gameKey, true);
+        } catch (e) {
+          console.error('[KeenpleShell] Catalog 로드 실패 — 유료 아이템 모드 시작 차단', e);
+          showCatalogLoadErrorModal();
+          return;
+        }
+      }
+      mode = startMode;
       gameOver = false;
       gameOverState = null;
       undoStack = createUndoStack(getUndoMax(startMode));
@@ -638,7 +669,9 @@
     }
     function currentUndoItem() {
       const modeConfig = modes && modes[mode];
-      return modeConfig && modeConfig.undoItem || null;
+      const item = modeConfig && modeConfig.undoItem;
+      if (!item) return null;
+      return resolveItemFromCatalog(item);
     }
     function updateUndoBtnLabel() {
       const item = currentUndoItem();
@@ -859,7 +892,7 @@
 
     // ── 표준 아이템 버튼 DOM 생성 ────────────────
     function buildItemButton(opts) {
-      opts = opts || {};
+      opts = resolveItemFromCatalog(opts || {});
       var currency = opts.currency === 'keen' ? 'keen' : 'coin';
       var label = opts.label || opts.name || { ko: '아이템', en: 'Item' };
       var btn = document.createElement('button');
@@ -907,7 +940,7 @@
 
     // ── 아이템 구매 플로우 ───────────────────────
     function purchaseItem(opts) {
-      opts = opts || {};
+      opts = resolveItemFromCatalog(opts || {});
       var price = opts.price || 0;
       var currency = opts.currency === 'keen' ? 'keen' : 'coin';
       var name = opts.name || { ko: '아이템', en: 'Item' };
@@ -922,6 +955,28 @@
       };
       if (opts.confirm === false) { proceed(); return; }
       showPurchaseConfirmModal(name, price, currency, proceed, opts.onCancel);
+    }
+
+    function showCatalogLoadErrorModal() {
+      var overlay = document.createElement('div');
+      overlay.className = 'keenple-fee-confirm-overlay keenple-catalog-error';
+      overlay.innerHTML =
+        '<div class="keenple-fee-confirm-card">' +
+          '<div class="keenple-fee-confirm-icon">⚠️</div>' +
+          '<div class="keenple-fee-confirm-title">' + t('아이템 정보 로드 실패', 'Failed to Load Item Info') + '</div>' +
+          '<div class="keenple-fee-confirm-msg">' +
+            t('서버에서 가격 정보를 가져올 수 없어 게임을 시작할 수 없습니다. 잠시 후 다시 시도해 주세요.',
+              'Cannot start the game without item pricing info from server. Please try again later.') +
+          '</div>' +
+          '<div class="keenple-fee-confirm-buttons">' +
+            '<button class="keenple-fee-confirm-ok">' + t('확인', 'OK') + '</button>' +
+          '</div>' +
+        '</div>';
+      document.body.appendChild(overlay);
+      var close = function () { overlay.classList.add('keenple-fee-confirm-out'); setTimeout(function(){ overlay.remove(); }, 200); };
+      overlay.querySelector('.keenple-fee-confirm-ok').onclick = close;
+      overlay.onclick = function (e) { if (e.target === overlay) close(); };
+      requestAnimationFrame(function () { overlay.classList.add('keenple-fee-confirm-in'); });
     }
 
     function showPurchaseConfirmModal(name, price, currency, onOk, onCancel) {

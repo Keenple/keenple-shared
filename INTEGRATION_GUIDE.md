@@ -191,6 +191,17 @@ KeenpleShell.createTurnBased({
 
 `serverCall` 미지정 시 `console.warn` 한 줄로만 알리고 mock으로 떨어졌던 설계가 프로덕션에서 조용한 실패를 냈습니다. v2.11.0부터 `price > 0`이면 즉시 차단.
 
+### 가격 단일 소스 — Catalog 우선 (v2.12.0+)
+
+**가격·통화·이름은 main DB(`syncCatalog` 등록값)가 단일 소스.** game.js의 `undoItem.price` / `createItemButton({ price })`는 **fallback** 역할만 하고, 게임 시작 시 shell이 `Keenple.Catalog.load(gameKey)`로 main에서 가져온 값으로 덮어씁니다.
+
+- `startGame()` 진입 시 `hasPaidItems(mode) && Keenple.Catalog`면 `await Keenple.Catalog.load(config.gameKey, true)` (force=true → 매 게임 fresh).
+- 로드 실패 시 **유료 아이템 있는 모드는 시작 차단 + 에러 모달** (다른 모드는 정상 진입).
+- `Keenple.Catalog` 자체가 없는 환경(구버전 main, SDK 미로드)은 차단 없이 fallback 진행.
+- `purchaseItem` · `currentUndoItem` · `createItemButton` 모두 한 헬퍼(`resolveItemFromCatalog`)를 거쳐 일관된 가격/라벨 보장.
+
+**관리자가 가격을 바꾸면 게임 클라 재배포 없이 즉시 반영**되는 게 목적입니다. game.js의 `price`는 단지 main 도달 불가 시 화면이 깨지지 않게 하는 안전망입니다.
+
 ---
 
 ## 5. 모드별 설정 사고법

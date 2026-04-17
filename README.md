@@ -80,6 +80,11 @@ BackToLobby.attach(document.getElementById('back-to-lobby-btn'), {
 
 ## 주요 Breaking change 이력
 
+- **v2.12.0** — 게임 내 아이템 가격이 main `Keenple.Catalog`(DB)를 단일 소스로 사용. game.js의 `price`/`currency`/`name`은 fallback으로만 사용됨.
+  - `startGame()`이 유료 아이템 있는 모드(`hasPaidItems(mode)`)에서 `await Keenple.Catalog.load(config.gameKey, true)` 후 진행
+  - 로드 실패 시 해당 모드 시작 차단 + 에러 모달 (무료 모드는 정상 진입)
+  - `Keenple.Catalog` SDK 미존재 환경은 차단 없이 fallback (구버전 main 호환)
+
 - **v2.10.0** — `createTurnBased` 옵션 검증 추가 (`validateConfig`). 다음 항목이 미선언이면 throw:
   - `config.gameKey` (string, 필수) — 이전엔 module/board만 필수였음
   - `config.module.{createInitialState, validateMove, applyMove, isTerminal}`
