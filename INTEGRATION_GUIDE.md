@@ -254,6 +254,88 @@ shared는 `getUndoMax(mode)` 가 `modes[mode].undoMax` → `modes.local.undoMax`
 
 ---
 
+## 7. 구버전 → v2.14.0 업그레이드 가이드
+
+알까기(v1.1.0), 장기(v2.1.0) 등 구버전 shared를 쓰는 게임이 최신으로 올리는 체크리스트.
+
+### 단계 1: package.json 업데이트
+
+```json
+"@keenple/shared": "github:Keenple/keenple-shared#v2.14.0"
+```
+
+`npm install` 후 서버·클라 양쪽 기동 → 콘솔 에러/경고 확인.
+
+### 단계 2: Breaking change 3건 대응 (v2.10.0 / v2.11.0 / v2.12.0)
+
+#### ⚠ v2.10.0 — validateConfig (throw)
+
+`createTurnBased` 호출 시 다음이 없으면 즉시 throw:
+
+| 필수 항목 | 예시 |
+|-----------|------|
+| `config.gameKey` (string) | `'janggi'` |
+| `config.module.createInitialState` (function) | GameModule |
+| `config.module.validateMove` (function) | GameModule |
+| `config.module.applyMove` (function) | GameModule |
+| `config.module.isTerminal` (function) | GameModule |
+| `config.board.mount` (function) | `(container, api) => { ... }` |
+| AI 모드 시 `modes.ai.difficulties` (배열) | `[{ id: 'easy', label, config }]` |
+| AI 모드 시 `modes.ai.onOpponentTurn` (function) | `(state, api) => move` |
+| MP 모드 시 `config.roles` 또는 `modes.mp.roles` (배열, 2+) | `['black', 'white']` |
+
+**에러 메시지가 정확히 어떤 항목인지 알려주므로** 콘솔 보고 하나씩 추가하면 됨.
+
+#### ⚠ v2.11.0 — serverCall 강제 (차단)
+
+`price > 0`인 아이템에 `serverCall` 미지정 시 **구매 즉시 차단** (이전엔 mock 경고만).
+
+```js
+// ✅ 올바른 예
+undoItem: {
+  itemId: 'game_undo_1', price: 5, currency: 'keen',
+  serverCall: async () => fetch('/api/purchase/item', { ... }).then(r => r.json()),
+}
+
+// ❌ v2.11.0 이후 차단됨
+undoItem: { price: 5 }  // serverCall 없음 → 토스트 에러, 구매 안 됨
+```
+
+테스트 중 mock이 필요하면 `createTurnBased({ dev: { allowMockPurchase: true } })`.
+
+#### ⚠ v2.12.0 — Catalog 우선 조회 (startGame gating)
+
+`Keenple.Catalog` SDK가 로드된 환경에서 유료 아이템 있는 모드 진입 시 `await Keenple.Catalog.load(gameKey, true)` 선행. **로드 실패 시 해당 모드 시작 차단 + 에러 모달.**
+
+대응:
+- server.js 기동 시 `wallet.syncCatalog(gameId, items)` 호출 확인 (아이템이 DB에 등록되어야 Catalog API가 반환)
+- `Keenple.Catalog` SDK 미존재 환경(구버전 main)은 자동 fallback — 차단 없음
+
+### 단계 3: 새 기능 활용 (선택)
+
+| 버전 | 기능 | 활용 시점 |
+|------|------|-----------|
+| v2.10.0 | `config.roleLabel(role)` 콜백 | HUD·게임오버에 역할명 한국어 표시 원할 때 |
+| v2.10.1 | `api.destroy()` | SPA 라우팅으로 shell 인스턴스 정리 시 |
+| v2.12.0 | Catalog 가격 단일 소스 | 관리자가 가격 변경 시 재배포 없이 반영 원할 때 |
+| v2.13.0 | wallet-client v1 prefix 자동 | 업그레이드만 하면 자동 적용 |
+| v2.14.0 | `createGameMenu` | 다중 모드 게임(장기 표준/속기 등)의 모드 선택 페이지 |
+
+### 단계 4: 물리 기반 게임 참고 (알까기)
+
+알까기처럼 `flick → result → 턴 변경` 패턴은 `createTurnBased`의 `validateMove → applyMove → isTerminal` 루프와 다를 수 있음. 두 가지 접근:
+
+- **(a) createTurnBased 활용**: `board.handleInput`에서 flick 이벤트 발생 → `applyMove`가 물리 시뮬레이션 결과를 state에 반영 → `isTerminal` 판정. 비동기 애니메이션은 `board.render`에서 처리. **체스와 구조 동일하게 맞출 수 있으면 이 방식 권장.**
+- **(b) server-mp + client-mp만 사용**: 로비/HUD/모달/입장료/아이템은 직접 SDK 호출, 게임 루프만 자체 구현. 현재 알까기가 이 상태. **shared의 UI 기능을 못 쓰는 대신 유연.**
+
+어느 방식이든 **server-mp의 `onGameEvent`/`broadcastToAll`/`endGame` 패턴은 공통**이므로 서버 측은 그대로 활용.
+
+### 단계 5: 장기 이벤트명 통일 (장기만 해당)
+
+장기(예측 장기)는 서버가 `mp:createRoom`/`mp:game`, 클라가 `createRoom`/`move`로 이벤트명 불일치 상태. shared의 client-mp.js 이벤트 규격(prefix 없는 `createRoom`/`move`)에 서버를 맞추는 게 표준.
+
+---
+
 ## 새 게임 CLAUDE.md에 넣을 한 줄
 
 새 게임의 `CLAUDE.md` → `## 개발 시 반드시 지킬 것` 섹션(또는 최상단) 맨 앞에 다음 줄을 추가:
