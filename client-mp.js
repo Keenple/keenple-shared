@@ -269,6 +269,24 @@ class GameClient {
     passthroughEvents.forEach(event => {
       s.on(event, (data) => this._emit(event, data));
     });
+
+    // entryFeeError: 서버가 입장료 차감 실패 시 emit (wallet_unavailable/login_required/insufficient_funds).
+    // 저수준 client-mp 직접 사용 시 리스너를 안 달면 게임 시작이 조용히 막혀 사용자에게 "멈춘 것처럼" 보임.
+    // 고수준 shell(turn-based.js)은 이미 핸들러를 붙이지만, 저수준 사용자를 위해 안전장치 1회 경고.
+    s.on('entryFeeError', (data) => {
+      this._emit('entryFeeError', data);
+      const passthroughCount = (this._listeners['entryFeeError'] || []).length;
+      const socketCount = (s.listeners('entryFeeError') || []).length - 1;  // 본 핸들러 제외
+      if (passthroughCount + socketCount === 0) {
+        const reason = (data && data.error) || 'unknown';
+        console.warn(
+          '[GameClient] entryFeeError(' + reason + ') 수신했지만 리스너 없음. ' +
+          'mp.on("entryFeeError", handler) 또는 mp.onServer("entryFeeError", ...)로 등록해 토스트/모달 안내를 띄우세요. ' +
+          '미등록 시 서버가 게임 시작을 막아도 사용자에게 피드백이 없어 "멈춘 것처럼" 보입니다. ' +
+          '서버 emit 분기: wallet_unavailable | login_required | insufficient_funds(required=숫자).'
+        );
+      }
+    });
   }
 
   // ─── 세션 저장/복원 ───────────────────────────────────────

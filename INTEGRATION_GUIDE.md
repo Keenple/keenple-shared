@@ -399,6 +399,58 @@ ctx.api.addAction('predictionCancel', {
 
 ---
 
+## 9. 서버 → 클라 emit 이벤트 목록 (저수준 client-mp 사용자용)
+
+**`createTurnBased` 사용 중이면 shared가 모두 자동 처리 — 읽을 필요 없습니다.** 아래는 `client-mp.js` + `createMultiplayerServer`를 저수준으로 직접 쓰는 게임(과거 장기, 커스텀 파생 등)이 놓치기 쉬운 서버 emit 이벤트 목록입니다.
+
+### 9.1 `client-mp.js`가 `mp.on(event, ...)` 으로 기본 제공 (passthroughEvents)
+
+| 이벤트 | 시점 | payload |
+|---|---|---|
+| `roomCreated` | 방 생성 성공 | `{ roomCode, playerId, role, minPlayers, maxPlayers, entryFee, serverConfig }` |
+| `roomJoined` | 방 참가/재접속/관전 성공 | `{ playerId, role, reconnected, options, entryFee, serverConfig, players, ... }` |
+| `playerJoined` | 상대가 방에 들어옴 | `{ playerId, role, nickname }` |
+| `playerDisconnected` | 상대 연결 끊김 | `{ playerId }` |
+| `playerReconnected` | 상대 재접속 | `{ playerId }` |
+| `readyToStart` | 최소 인원 충족 | `{ players }` |
+| `gameStart` | 게임 시작 | `{ players, gameState, options, entryFee, serverConfig }` |
+| `gameOver` | 게임 종료 (broadcastToAll) | `{ ...data }` (게임이 넘긴 데이터 전부) |
+| `spectatorJoined` | 관전자로 입장 성공 | (빈) |
+| `error` | 일반 서버 오류 | `{ message }` |
+| **`entryFeeError`** | **입장료 차감 실패** | **`{ error: 'wallet_unavailable' \| 'login_required' \| 'insufficient_funds', required? }`** |
+
+### 9.2 `mp.onServer(event, ...)` 로 직접 구독해야 하는 것 (server-mp.js 또는 게임 서버가 emit)
+
+| 이벤트 | emitter | payload |
+|---|---|---|
+| `eloUpdate` | server-mp.js | `{ before, after, change }` |
+| `payoutResult` | server-mp.js | `{ amount, reason, balanceAfter }` |
+| `moveApplied` | 게임 서버 | `{ state, ... }` (게임 규격) |
+| `syncState` | 게임 서버 | `{ state }` (재접속 시 전체 state 동기화) |
+| `turnTimer` | 게임 서버 | `{ deadline? }` 또는 `{ seconds? }` |
+| `roomList` | 게임 서버 (로비용) | `rooms[]` |
+| `playerLeft` | server-mp.js (broadcastToRoom) | `{ playerId, role }` |
+
+### 9.3 `entryFeeError`는 반드시 리스너를 붙이세요
+
+서버가 `entryFeeError` emit → 게임 시작 차단. 클라가 리스너 안 달면 **사용자에게 "게임 시작 실패" 피드백이 없어서 멈춘 것처럼 보입니다.**
+
+```js
+mp.on('entryFeeError', (data) => {
+  const msg = {
+    wallet_unavailable: { ko: '지갑 서버 연결 불가',  en: 'Wallet server unreachable' },
+    login_required:     { ko: '로그인이 필요합니다',  en: 'Login required' },
+    insufficient_funds: { ko: '코인이 부족합니다 (' + data.required + ' coin 필요)', en: 'Not enough coins (' + data.required + ' required)' },
+  }[data.error] || { ko: '입장료 오류', en: 'Entry fee error' };
+  Keenple.UI.toast(msg, { type: 'error' });
+  // 로비 상태 복구 — setStatus/showCancel 등
+});
+```
+
+v2.15.1+ 부터 `client-mp.js`는 `entryFeeError`에 리스너가 없으면 1회 `console.warn`을 띄워 조용한 멈춤을 사전 경고합니다.
+
+---
+
 ## 새 게임 CLAUDE.md에 넣을 한 줄
 
 새 게임의 `CLAUDE.md` → `## 개발 시 반드시 지킬 것` 섹션(또는 최상단) 맨 앞에 다음 줄을 추가:

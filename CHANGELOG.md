@@ -6,6 +6,23 @@
 
 ---
 
+## v2.15.1 (2026-04-17)
+
+### Added
+- `client-mp.js` — `entryFeeError` passthrough 추가 (`mp.on('entryFeeError', ...)`으로 수신 가능). 리스너 미등록 시 1회 `console.warn` — 저수준 사용자가 서버 차단을 놓쳐 사용자에게 "멈춘 화면"을 주는 실수 예방.
+- `INTEGRATION_GUIDE.md` 섹션 9 — "서버 → 클라 emit 이벤트 목록". passthrough 11종 + onServer 전용 7종 표로 정리. `entryFeeError` 처리 권장 코드 포함.
+
+### Changed
+- (없음)
+
+### Breaking ⚠
+- (없음)
+
+### Fixed
+- `entryFeeError`가 `client-mp.js`의 passthroughEvents에 누락돼 있어 저수준 사용자는 반드시 `mp.onServer(...)`로만 받을 수 있던 비일관성.
+
+---
+
 ## v2.15.0 (2026-04-17)
 
 ### Added
