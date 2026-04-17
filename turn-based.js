@@ -1560,7 +1560,89 @@
     };
   }
 
-  const KeenpleShell = { createTurnBased };
+  // ============================================
+  //  Game Menu — 모드 선택 카드 UI (v2.14.0)
+  // ============================================
+  // 여러 변형/모드를 가진 게임의 루트 페이지용.
+  // 각 카드 클릭 → href로 이동 (MPA) 또는 onClick 콜백 (SPA).
+  // 모드별 페이지에서 createTurnBased를 각각 호출하는 구조.
+  function createGameMenu(config) {
+    if (!config || !config.title) throw new Error('[KeenpleShell] createGameMenu: config.title 필수');
+    if (!Array.isArray(config.modes) || config.modes.length === 0) {
+      throw new Error('[KeenpleShell] createGameMenu: config.modes (배열, 1개 이상) 필수');
+    }
+
+    var mount = config.mount
+      ? (typeof config.mount === 'string' ? document.querySelector(config.mount) : config.mount)
+      : document.body;
+
+    // SDK TopBar 자동 구성
+    if (typeof Keenple !== 'undefined' && Keenple.UI) {
+      if (Keenple.UI.setTheme && config.theme) Keenple.UI.setTheme(config.theme);
+      if (Keenple.UI.TopBar) Keenple.UI.TopBar({ gameName: config.title });
+    }
+
+    // 타이틀
+    document.title = t(config.title.ko, config.title.en);
+
+    var container = el('div', { class: 'keenple-game-menu' }, [
+      el('h1', {
+        class: 'keenple-game-menu-title',
+        dataKo: config.title.ko,
+        dataEn: config.title.en,
+      }, config.title.ko),
+      buildCards(config.modes),
+    ]);
+
+    mount.appendChild(container);
+
+    function buildCards(modes) {
+      var grid = el('div', { class: 'keenple-game-menu-cards' });
+      modes.forEach(function (m) {
+        if (!m.title) return;
+        var titleEl = el('h2', {
+          dataKo: m.title.ko, dataEn: m.title.en,
+        }, m.title.ko);
+        var descEl = m.description
+          ? el('p', { dataKo: m.description.ko, dataEn: m.description.en }, m.description.ko)
+          : null;
+        var badgeEl = m.badge
+          ? el('span', { class: 'keenple-game-menu-badge', dataKo: m.badge.ko, dataEn: m.badge.en }, m.badge.ko)
+          : null;
+
+        var tag = m.href ? 'a' : 'div';
+        var attrs = { class: 'keenple-game-menu-card' };
+        if (m.href) attrs.href = m.href;
+        if (m.disabled) attrs.class += ' keenple-game-menu-card-disabled';
+
+        var card = el(tag, attrs, [badgeEl, titleEl, descEl].filter(Boolean));
+
+        if (!m.href && typeof m.onClick === 'function') {
+          card.style.cursor = 'pointer';
+          card.addEventListener('click', function () { if (!m.disabled) m.onClick(m); });
+        }
+        if (m.disabled) card.style.pointerEvents = 'none';
+
+        grid.appendChild(card);
+      });
+      return grid;
+    }
+
+    // 한/영 전환 대응
+    function onLangChange() {
+      document.title = t(config.title.ko, config.title.en);
+    }
+    window.addEventListener('keenple:langchange', onLangChange);
+
+    return {
+      destroy: function () {
+        window.removeEventListener('keenple:langchange', onLangChange);
+        if (container.parentNode) container.parentNode.removeChild(container);
+      },
+    };
+  }
+
+  const KeenpleShell = { createTurnBased, createGameMenu };
   if (typeof module === 'object' && module.exports) module.exports = KeenpleShell;
   else root.KeenpleShell = KeenpleShell;
 

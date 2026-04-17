@@ -6,6 +6,27 @@
 
 ---
 
+## v2.14.0 (2026-04-17)
+
+### Added
+- `KeenpleShell.createGameMenu(config)` — 여러 변형/모드를 가진 게임의 루트 페이지용 모드 선택 카드 UI.
+  - SDK TopBar 자동 구성 + 한/영 전환 자동 대응.
+  - 각 카드에 `href`(MPA 페이지 이동) 또는 `onClick`(SPA 콜백) 지정 가능.
+  - `badge`(라벨 배지), `disabled`(비활성 카드), `description` 지원.
+  - `destroy()` 메서드로 정리 가능.
+- `turn-based.css`에 `.keenple-game-menu-*` 카드 스타일 추가 (CSS 변수 오버라이드 가능).
+
+### Changed
+- (없음)
+
+### Breaking ⚠
+- (없음 — 새 함수 추가만. 기존 `createTurnBased` 무변경.)
+
+### Fixed
+- (없음)
+
+---
+
 ## v2.13.0 (2026-04-17)
 
 ### Added

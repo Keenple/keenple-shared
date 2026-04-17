@@ -537,3 +537,59 @@ body.keenple-shell {
 }
 .keenple-item-btn-price-icon { font-size: 13px; }
 .keenple-item-btn-price-amount { font-size: 12px; }
+
+/* ── Game Menu (createGameMenu) ──────────── */
+.keenple-game-menu {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 80px 16px 24px;
+}
+.keenple-game-menu-title {
+  text-align: center;
+  margin: 8px 0 24px;
+  font-size: 32px;
+  font-weight: 800;
+  background: linear-gradient(135deg, var(--keenple-surrender, #ff6b6b), #6ba3ff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.keenple-game-menu-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+.keenple-game-menu-card {
+  position: relative;
+  background: var(--keenple-accent, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--keenple-border, rgba(255, 255, 255, 0.1));
+  border-radius: 12px;
+  padding: 24px;
+  text-decoration: none;
+  color: var(--keenple-fg, #e0e0e0);
+  transition: transform 0.15s, border-color 0.15s, background 0.15s;
+  display: block;
+}
+.keenple-game-menu-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.25);
+  background: var(--keenple-accent-hover, rgba(255, 255, 255, 0.07));
+}
+.keenple-game-menu-card h2 { margin: 0 0 8px; font-size: 20px; color: #fff; }
+.keenple-game-menu-card p { margin: 0; color: #aaa; font-size: 14px; line-height: 1.5; }
+.keenple-game-menu-card-disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+.keenple-game-menu-badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: rgba(107, 163, 255, 0.2);
+  color: #6ba3ff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(107, 163, 255, 0.3);
+}
