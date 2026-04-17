@@ -4,7 +4,7 @@ Keenple 게임들이 공유하는 공통 모듈.
 
 ## 새 게임 이식 담당 (Claude / 개발자) 체크리스트
 
-체스가 v2.2 → v2.10 동안 reference 역할을 하며 같은 영역에서 반복 패치가 나왔습니다. 다음 게임은 이 지점들을 건너뛰세요.
+**먼저 [INTEGRATION_GUIDE.md](./INTEGRATION_GUIDE.md)를 읽으세요** (v2.11+ 실전 가이드, 체스 v2.2~v2.10 에피소드 요약). 체스가 v2.2 → v2.10 동안 reference 역할을 하며 같은 영역에서 반복 패치가 나왔습니다. 다음 게임은 이 지점들을 건너뛰세요.
 
 - **경고 무시 금지** — v2.10부터 `validateConfig` · `checkServerConfig` · `isOpponentTurn` 미선언 경고가 콘솔에 나옵니다. warning이 보이면 설정이 빠진 것입니다.
 - **선언만 사용** — `entryFee`, `rankMatch`, `modes.*.undoItem(freeCount 포함)`, `roles`/`roleLabel`, `isOpponentTurn` 는 모두 선언형 옵션으로 제공됩니다. 게임 코드에서 직접 지갑 차감 · DOM 트릭 · buyItem 수동 호출 금지.

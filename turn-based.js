@@ -310,7 +310,6 @@
       return { ko: String(role), en: String(role) };
     }
     const defaultEntryFee = config.entryFee || 0;
-    let _mockPurchaseWarned = false;
     let _aiSideWarned = false;
     const _mismatchWarned = {};
     function checkOptionMismatch(key, clientValue, serverValue, context) {
@@ -952,25 +951,39 @@
 
     async function runPurchase(opts, currency) {
       var price = opts.price || 0;
-      var isMock = typeof opts.serverCall !== 'function';
+      var hasServerCall = typeof opts.serverCall === 'function';
+      var mockAllowed = !!(config.dev && config.dev.allowMockPurchase);
+
+      // price > 0인데 serverCall 미구현이고 mock 허용도 안 된 경우 — 조용한 실패 차단
+      if (price > 0 && !hasServerCall && !mockAllowed) {
+        console.error(
+          '[KeenpleShell] buyItem: serverCall 필수 (price>0). ' +
+          '실제 차감 엔드포인트를 opts.serverCall로 제공하거나, ' +
+          '테스트 중이면 createTurnBased({ dev: { allowMockPurchase: true } }) 선언 필요.'
+        );
+        api.showToast({ ko: '현재 구매 불가', en: 'Purchase unavailable' }, { type: 'error' });
+        return;
+      }
+
+      var isMock = !hasServerCall;
       try {
-        if (!isMock) {
+        if (hasServerCall) {
           var result = await opts.serverCall();
           if (!result || !result.ok) {
             var err = (result && result.error) || 'purchase_failed';
             var bal = getBalance(currency);
             if (err === 'insufficient_funds' && bal != null) {
               showInsufficientModal(price, bal, currency);
+            } else if (err === 'login_required') {
+              api.showToast({ ko: '로그인이 필요합니다', en: 'Login required' }, { type: 'error' });
             } else {
-              api.showToast({ ko: '구매 실패: ' + err, en: 'Purchase failed: ' + err }, { type: 'error' });
+              api.showToast({ ko: '구매 실패', en: 'Purchase failed' }, { type: 'error' });
             }
             return;
           }
         } else {
-          if (!_mockPurchaseWarned) {
-            _mockPurchaseWarned = true;
-            console.warn('[KeenpleShell] buyItem: serverCall 미지정 — mock 모드로 클라 잔액만 감산. 새로고침 시 원복됨. 실제 차감은 serverCall 구현 필요.');
-          }
+          // mockAllowed === true 인 경로 — 개발자 명시 opt-in. 매 호출 warn
+          console.warn('[KeenpleShell] MOCK 구매 — 로컬 잔액만 감산됨 (dev.allowMockPurchase)');
           var curBal = getBalance(currency);
           if (curBal != null && price > 0) setBalanceLocal(currency, Math.max(0, curBal - price));
         }
