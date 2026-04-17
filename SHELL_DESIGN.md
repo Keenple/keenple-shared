@@ -240,21 +240,40 @@ hooks: {
 
 Shell은 이 Promise가 resolve될 때까지 **게임 시작을 지연**. MP에선 양쪽 모두 resolve될 때까지 대기.
 
-### 5.2 장기 예측/스캔 (`customOverlays`)
+### 5.2 장기 예측/스캔 (`customActions` · v2.15.0+)
+
+예측/스캔은 **보드 옆 액션바에 상시 노출되는 N개 인스턴스 버튼** + **사용하면 used 회색 상태 유지**. 모달형 오버레이(`customOverlays`)로는 부족해서 별도 슬롯을 둡니다.
 
 ```js
 hooks: {
-  customOverlays: {
+  customActions: {
     prediction: {
-      render: (state, api) => createPredictionUI(state, api),
-      triggers: ['prediction-mode-enter', 'prediction-mode-exit'],
+      count: (state) => state.maxPredictions,   // number 또는 (state) => number
+      render: (ctx) => {                        // 최초 1회. canvas 자유.
+        const canvas = document.createElement('canvas');
+        canvas.width = 40; canvas.height = 40;
+        drawStamp(canvas.getContext('2d'), ctx.index);  // 도장 모양
+        return canvas;
+      },
+      update: (el, ctx) => { /* 선택: state 변화 시 DOM 업데이트 */ },
+      onClick: (ctx) => {                       // used/disabled면 shared가 차단
+        ctx.api.emit('prediction:use', { index: ctx.index });
+      },
+      isUsed: (ctx) => ctx.state.predictions[ctx.index].used === true,
+      isDisabled: (ctx) => ctx.state.gameOver || ctx.state.inPredictionMode,
     },
-    scan: { ... },
+    scan: { /* 동일 구조 */ },
   },
 }
 ```
 
-Shell은 이 오버레이들의 표시/숨김 상태만 관리. 실제 로직은 게임이.
+Shell의 자동 처리:
+- `#keenple-custom-actions` 컨테이너 생성 및 각 id별 그룹 DOM 주입.
+- state 변화(`board.render` 호출 지점)마다 `isUsed`/`isDisabled`/`update` 재평가 → `data-used`·`disabled` 자동 토글.
+- `api.addAction(id, spec)` / `api.removeAction(id)` — 예측 모드 진입 시 취소 버튼 동적 추가/제거.
+- `api.refreshActions(id?)` — 타이머 등 외부 트리거로 상태 바뀔 때 수동 재평가.
+
+**예약어**: `undo`, `surrender` 는 customActions id로 사용 불가 (throw).
 
 ### 5.3 체스 승급 모달 (`promotion`)
 

@@ -15,7 +15,7 @@
 //  - module (createInitialState/validateMove/applyMove/isTerminal)
 //  - board.mount/render/handleInput
 //  - (선택) modes.ai.onOpponentTurn
-//  - (선택) hooks (onBeforeGameStart, gameOverExtras, customOverlays, onModeStart)
+//  - (선택) hooks (onBeforeGameStart, gameOverExtras, customOverlays, customActions, onModeStart)
 //
 // 사전 요구: Keenple SDK, socket.io, client-mp.js, back-to-lobby.js 가 이미 로드돼 있어야 함.
 // ============================================
@@ -60,6 +60,7 @@
         el('div', { id: 'keenple-controls', class: 'keenple-controls' }, [
           el('button', { id: 'keenple-undo-btn', class: 'keenple-ctrl-btn', style: { display: 'none' }, dataKo: '되돌리기', dataEn: 'Undo' }, '되돌리기'),
           el('button', { id: 'keenple-surrender-btn', class: 'keenple-surrender-btn', style: { display: 'none' }, dataKo: '항복', dataEn: 'Surrender' }, '항복'),
+          el('div', { id: 'keenple-custom-actions', class: 'keenple-custom-actions' }),
         ]),
         el('div', { id: 'keenple-overlays' }),
       ]);
@@ -457,6 +458,21 @@
       //   opts: buyItem의 opts 전부 + { icon?: '↩️' | HTMLElement, className?: '' }
       //   반환: HTMLButtonElement (클릭 시 buyItem 플로우 실행)
       createItemButton: (opts) => buildItemButton(opts),
+      // customActions 런타임 추가/제거/재평가 (v2.15.0).
+      //   addAction(id, spec):    예측 모드 진입 시 취소 버튼 등 동적 버튼.
+      //                           spec: { count?, render, update?, onClick, isUsed?, isDisabled? }
+      //   removeAction(id):       동적으로 추가한 action 제거.
+      //   refreshActions(id?):    state 변화 시 자동 호출되지만, 외부 트리거(타이머 등)로
+      //                           isUsed/isDisabled가 바뀌는 경우 수동 호출.
+      addAction: (id, spec) => {
+        if (customActionsMap[id]) {
+          console.warn('[KeenpleShell] addAction: "' + id + '" 이미 존재 — removeAction 후 다시 추가');
+          return;
+        }
+        mountCustomAction(id, spec);
+      },
+      removeAction: (id) => unmountCustomAction(id),
+      refreshActions: (id) => refreshCustomActions(id),
     };
 
     // ── Custom overlays 슬롯 생성 ─────────────
@@ -464,6 +480,115 @@
       const overlayRoot = document.getElementById('keenple-overlays');
       Object.keys(hooks.customOverlays).forEach(id => {
         overlayRoot.appendChild(el('div', { id: 'keenple-overlay-' + id, class: 'keenple-overlay', style: { display: 'none' } }));
+      });
+    }
+
+    // ── Custom actions (action-bar 슬롯) ─────────
+    //   hooks.customActions[id] = {
+    //     count:      number | (state) => number,   // 인스턴스 개수 (기본 1)
+    //     render:     (ctx) => HTMLElement,          // 최초 1회. canvas 자유.
+    //                                                 // ctx: { index, state, api, getState, getMode }
+    //     update?:    (el, ctx) => void,             // state 변화 시 호출 (canvas 재그리기 등)
+    //     onClick:    (ctx) => void,                 // 클릭 핸들러. used/disabled면 shared가 차단.
+    //     isUsed?:    (ctx) => boolean,              // true → data-used="true" + disabled
+    //     isDisabled?:(ctx) => boolean,              // true → disabled
+    //   }
+    //   예약어: 'undo', 'surrender' (에러).
+    const RESERVED_ACTION_IDS = ['undo', 'surrender'];
+    const customActionsRoot = document.getElementById('keenple-custom-actions');
+    const customActionsMap = {};   // id -> { spec, groupEl, items: [{ el, index }] }
+
+    function validateActionSpec(id, spec) {
+      if (RESERVED_ACTION_IDS.indexOf(id) !== -1) {
+        throw new Error('[KeenpleShell] customActions id "' + id + '" 은 예약어입니다 (undo/surrender)');
+      }
+      if (!spec || typeof spec !== 'object') throw new Error('[KeenpleShell] customActions.' + id + ' spec 객체가 필요합니다');
+      if (typeof spec.render !== 'function') throw new Error('[KeenpleShell] customActions.' + id + '.render (function) 이 필수입니다');
+      if (typeof spec.onClick !== 'function') throw new Error('[KeenpleShell] customActions.' + id + '.onClick (function) 이 필수입니다');
+    }
+
+    function resolveActionCount(spec) {
+      if (typeof spec.count === 'function') {
+        try { return Math.max(0, spec.count(state) | 0); }
+        catch (e) { console.error('[shell] customActions count 에러', e); return 0; }
+      }
+      if (typeof spec.count === 'number') return Math.max(0, spec.count | 0);
+      return 1;
+    }
+
+    function buildActionCtx(index) {
+      return { index: index, state: state, api: api, getState: () => state, getMode: () => mode };
+    }
+
+    function mountCustomAction(id, spec) {
+      validateActionSpec(id, spec);
+      const count = resolveActionCount(spec);
+      const groupEl = el('div', { class: 'keenple-action-group', 'data-id': id });
+      const items = [];
+      for (let i = 0; i < count; i++) {
+        const ctx = buildActionCtx(i);
+        const btn = el('button', { class: 'keenple-action-item', 'data-index': String(i) });
+        let inner = null;
+        try { inner = spec.render(ctx); }
+        catch (e) { console.error('[shell] customActions.' + id + '.render', e); }
+        if (inner instanceof HTMLElement) btn.appendChild(inner);
+        btn.addEventListener('click', (function (idx) {
+          return function () {
+            if (btn.disabled) return;
+            try { spec.onClick(buildActionCtx(idx)); }
+            catch (e) { console.error('[shell] customActions.' + id + '.onClick', e); }
+          };
+        })(i));
+        groupEl.appendChild(btn);
+        items.push({ el: btn, index: i });
+      }
+      customActionsRoot.appendChild(groupEl);
+      customActionsMap[id] = { spec: spec, groupEl: groupEl, items: items };
+      refreshCustomAction(id);
+    }
+
+    function refreshCustomAction(id) {
+      const entry = customActionsMap[id];
+      if (!entry) return;
+      const spec = entry.spec;
+      entry.items.forEach(function (item) {
+        const btn = item.el;
+        const ctx = buildActionCtx(item.index);
+        let used = false, disabled = false;
+        if (typeof spec.isUsed === 'function') {
+          try { used = !!spec.isUsed(ctx); } catch (e) { console.error('[shell] customActions.' + id + '.isUsed', e); }
+        }
+        if (typeof spec.isDisabled === 'function') {
+          try { disabled = !!spec.isDisabled(ctx); } catch (e) { console.error('[shell] customActions.' + id + '.isDisabled', e); }
+        }
+        btn.dataset.used = used ? 'true' : 'false';
+        btn.disabled = used || disabled;
+        if (typeof spec.update === 'function') {
+          try { spec.update(btn, ctx); } catch (e) { console.error('[shell] customActions.' + id + '.update', e); }
+        }
+      });
+    }
+
+    function refreshCustomActions(id) {
+      if (id) return refreshCustomAction(id);
+      Object.keys(customActionsMap).forEach(refreshCustomAction);
+    }
+
+    function unmountCustomAction(id) {
+      const entry = customActionsMap[id];
+      if (!entry) return;
+      if (entry.groupEl && entry.groupEl.parentNode) {
+        entry.groupEl.parentNode.removeChild(entry.groupEl);
+      }
+      delete customActionsMap[id];
+    }
+
+    function mountAllCustomActions() {
+      if (!hooks.customActions) return;
+      Object.keys(hooks.customActions).forEach(function (id) {
+        if (customActionsMap[id]) return;
+        try { mountCustomAction(id, hooks.customActions[id]); }
+        catch (e) { console.error('[shell] customActions mount 실패: ' + id, e); }
       });
     }
 
@@ -578,6 +703,11 @@
       if (config.board.mount) config.board.mount(boardContainer, api);
       if (config.board.render) config.board.render(state, api);
 
+      // customActions 최초 mount (config.hooks.customActions 에 선언된 것)
+      // 게임마다 mount 1회. state 변화 시 자동 refresh는 아래 각 render 호출 지점에서.
+      Object.keys(customActionsMap).forEach(unmountCustomAction);
+      mountAllCustomActions();
+
       currentTurn = state.currentTurn || (state.turn != null ? state.turn : null);
 
       // HUD 생성/업데이트
@@ -623,6 +753,7 @@
       state = MOD.applyMove(state, move);
       currentTurn = state.currentTurn || state.turn;
       if (config.board.render) config.board.render(state, api);
+      refreshCustomActions();
       updateHudTurn();
 
       const term = MOD.isTerminal(state);
@@ -664,6 +795,7 @@
         if (isAiTurn(state)) scheduleAiMove(300);
       }
       if (config.board.render) config.board.render(state, api);
+      refreshCustomActions();
       updateHudTurn();
       if (!undoStack.size()) undoBtn.disabled = true;
     }
@@ -1230,6 +1362,7 @@
           state = (typeof data.state === 'string' && MOD.deserialize) ? MOD.deserialize(data.state) : data.state;
           currentTurn = state.currentTurn || state.turn;
           if (config.board.render) config.board.render(state, api);
+          refreshCustomActions();
           updateHudTurn();
         }
       });
@@ -1239,6 +1372,7 @@
           state = (typeof data.state === 'string' && MOD.deserialize) ? MOD.deserialize(data.state) : data.state;
           currentTurn = state.currentTurn || state.turn;
           if (config.board.render) config.board.render(state, api);
+          refreshCustomActions();
           updateHudTurn();
         }
       });
@@ -1532,7 +1666,10 @@
     }
 
     addShellListener(window, 'keenple:langchange', () => {
-      try { if (state && config.board.render) config.board.render(state, api); }
+      try {
+        if (state && config.board.render) config.board.render(state, api);
+        refreshCustomActions();
+      }
       catch (e) { showShellError('langchange-render', e); }
     });
 

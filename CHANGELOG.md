@@ -6,6 +6,27 @@
 
 ---
 
+## v2.15.0 (2026-04-17)
+
+### Added
+- `hooks.customActions` — 액션바(`#keenple-controls`) 하단에 게임 고유의 커스텀 버튼 슬롯. 장기 예측/스캔 같은 "상시 토글 + N개 인스턴스 + used 상태" UX를 선언적으로 지원.
+  - **스펙 필드**: `count`(number 또는 `(state) => number`), `render(ctx) → HTMLElement`(최초 1회·canvas 자유), `update(el, ctx)`(선택: state 변화 시 DOM 업데이트), `onClick(ctx)`, `isUsed(ctx) → bool`(→ `data-used` 자동 세팅 + disabled), `isDisabled(ctx) → bool`.
+  - **자동 재평가 타이밍**: `board.render` 호출 지점(초기 mount, local/AI move, undo, mp `moveApplied`/`syncState`, 언어 전환)마다 shared가 `isUsed`/`isDisabled`/`update` 재호출. 추가 트리거 필요 시 `api.refreshActions(id?)` 수동 호출.
+  - **런타임 추가/제거**: `api.addAction(id, spec)` / `api.removeAction(id)` — 예측 모드 진입 시 취소 버튼 등 동적 주입.
+  - **예약어**: `undo`, `surrender` 은 customActions id로 사용 불가 (throw).
+- `.keenple-custom-actions` · `.keenple-action-group` · `.keenple-action-item` CSS — 게임이 `data-id` 선택자로 색/크기/아이콘 override 가능.
+
+### Changed
+- `mountStandardDom` — `#keenple-controls` 내부에 `#keenple-custom-actions` 컨테이너 추가. undo/surrender 버튼 배치는 그대로.
+
+### Breaking ⚠
+- (없음 — customActions 미선언 게임은 기존 동작 그대로.)
+
+### Fixed
+- (없음)
+
+---
+
 ## v2.14.1 (2026-04-17)
 
 ### Added

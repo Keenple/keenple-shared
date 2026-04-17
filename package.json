@@ -1,6 +1,6 @@
 {
   "name": "@keenple/shared",
-  "version": "2.14.1",
+  "version": "2.15.0",
   "description": "Keenple 게임들의 공통 모듈 · 카테고리별 Game Shell (v2.0+)",
   "repository": {
     "type": "git",

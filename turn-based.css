@@ -95,6 +95,46 @@ body.keenple-shell {
   border-color: rgba(255, 80, 80, 0.5);
 }
 
+/* ── Custom actions (v2.15.0) ───────────────
+   액션바 하단 커스텀 버튼 슬롯. 게임이 render 콜백으로 DOM/canvas 자유 주입.
+   shared는 wrapper(.keenple-action-item)에 하이라이트/비활성/used만 표준화.
+   게임이 색·크기·아이콘을 override하려면 data-id 선택자로 덮어쓰면 됩니다. */
+.keenple-custom-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.keenple-action-group {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+.keenple-action-item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border: 1px solid var(--keenple-border);
+  border-radius: 8px;
+  background: var(--keenple-accent);
+  color: var(--keenple-fg);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+  font-family: inherit;
+}
+.keenple-action-item:hover:not(:disabled) {
+  background: var(--keenple-accent-hover);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+.keenple-action-item:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.keenple-action-item[data-used="true"] {
+  opacity: 0.35;
+  filter: grayscale(1);
+}
+
 /* ── AI 난이도 선택 ────────────────────────── */
 .keenple-picker-container {
   display: flex;
