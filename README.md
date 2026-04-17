@@ -72,23 +72,14 @@ BackToLobby.attach(document.getElementById('back-to-lobby-btn'), {
 - 각 게임은 `package.json`에서 원하는 버전 고정 사용
 - 업데이트: `npm install @keenple/shared@github:Keenple/keenple-shared#v1.2.0`
 
-## Breaking change 정책
+## SemVer · Breaking change 정책
 
-- **1.x.y** 이내에서 backward-compatible만 추가
-- 인자 시그니처 변경·이벤트 이름 변경·**파일 경로 재구성** 등은 메이저(2.0.0) 올림
-- v1.0.0 → v1.1.0: 파일을 루트로 플랫화 (기존 서브폴더 경로 깨짐). 원칙상 메이저지만 사용처가 4곳뿐이라 마이너로 처리하고 소비자 측을 동시 업데이트.
+shared는 엄격 SemVer(`MAJOR.MINOR.PATCH`)을 따릅니다. 핵심 3줄:
 
-## 주요 Breaking change 이력
+- **Patch** (`x.y.Z`) — 버그 수정, 동작 동일. 게임 업그레이드 안 해도 됨.
+- **Minor** (`x.Y.0`) — 기능 추가, 하위 호환. 게임 코드 수정 불필요.
+- **Major** (`X.0.0`) — 하위 호환 깨짐. 게임 코드 수정 동반. CHANGELOG의 `Breaking ⚠` 섹션 필독.
 
-- **v2.12.0** — 게임 내 아이템 가격이 main `Keenple.Catalog`(DB)를 단일 소스로 사용. game.js의 `price`/`currency`/`name`은 fallback으로만 사용됨.
-  - `startGame()`이 유료 아이템 있는 모드(`hasPaidItems(mode)`)에서 `await Keenple.Catalog.load(config.gameKey, true)` 후 진행
-  - 로드 실패 시 해당 모드 시작 차단 + 에러 모달 (무료 모드는 정상 진입)
-  - `Keenple.Catalog` SDK 미존재 환경은 차단 없이 fallback (구버전 main 호환)
+상세 정책(API 버전 규칙, 게임 레포 책임, FAQ 등)은 [keenple-main `docs/API-VERSIONING.md`](https://github.com/Keenple/keenple-main/blob/main/docs/API-VERSIONING.md)가 단일 진실원입니다.
 
-- **v2.10.0** — `createTurnBased` 옵션 검증 추가 (`validateConfig`). 다음 항목이 미선언이면 throw:
-  - `config.gameKey` (string, 필수) — 이전엔 module/board만 필수였음
-  - `config.module.{createInitialState, validateMove, applyMove, isTerminal}`
-  - `config.board.mount` (function)
-  - AI 모드 활성 시 `modes.ai.difficulties` (배열) + `modes.ai.onOpponentTurn` (function)
-  - MP 모드 활성 시 `config.roles` 또는 `modes.mp.roles` (2개 이상)
-  - 기존 게임이 v2.9.x → v2.10.x 업그레이드 시 위 필수 항목 누락되면 즉시 throw. 콘솔 로그에서 어떤 항목인지 확인 후 선언 보강.
+버전별 변경 내역은 [`CHANGELOG.md`](./CHANGELOG.md) 참조.

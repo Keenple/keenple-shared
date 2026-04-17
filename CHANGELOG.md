@@ -1,0 +1,59 @@
+# CHANGELOG
+
+`@keenple/shared` 버전별 변경 내역. SemVer 정책은 [keenple-main `docs/API-VERSIONING.md`](https://github.com/Keenple/keenple-main/blob/main/docs/API-VERSIONING.md) 참조.
+
+포맷: `Added` / `Changed` / `Breaking ⚠` / `Fixed`. v2.12.0부터 정식 작성. 그 이전 변경은 `git log` + 본 파일 하단의 "v2.12.0 이전 주요 변경" 섹션 참조.
+
+---
+
+## v2.13.0 (2026-04-17)
+
+### Added
+- `wallet-client.js` 내부에서 `/api/*` 호출을 `/api/v1/*`로 자동 치환 (path가 이미 `/api/v`로 시작하면 그대로). 호출 코드 변경 불필요. `postJson`·`getJson` 둘 다 적용. (개선 #4-C)
+- `server-mp.js`의 `/api/match/result` 호출도 동일한 v1 prefix 자동 치환.
+- `CHANGELOG.md` 신설 (이 파일).
+- README에 SemVer 핵심 3줄 + main 정식 정책 문서 링크.
+
+### Changed
+- (없음)
+
+### Breaking ⚠
+- (없음 — main이 `/api/*` 레거시 alias 유지 중이라 fail-safe)
+
+### Fixed
+- (없음)
+
+---
+
+## v2.12.0 (2026-04-17)
+
+### Added
+- `Keenple.Catalog` 통합 — 게임 내 아이템 가격이 main DB(`syncCatalog` 등록값)를 단일 소스로 사용.
+  - `resolveItemFromCatalog(opts)` 헬퍼 — Catalog.get(itemId)로 price/currency/name 덮어쓰기. SDK 미존재/캐시 미스 시 opts 그대로 반환.
+  - `hasPaidItems(modeName)` 헬퍼 — modes[mode].undoItem.price > 0 검사.
+  - `startGame()` Catalog gating — 유료 모드에서 `await Keenple.Catalog.load(config.gameKey, true)`. 실패 시 에러 모달 + 게임 시작 중단 (로비 유지).
+  - `purchaseItem` · `buildItemButton` · `currentUndoItem` 진입부에서 resolve 통과 → undoItem · createItemButton · 직접 buyItem 모두 일관된 가격/라벨.
+
+### Changed
+- (없음)
+
+### Breaking ⚠
+- (없음 — `Keenple.Catalog` 미존재 환경에서는 차단 없이 fallback. 기존 게임 안 깨짐.)
+
+### Fixed
+- (없음)
+
+---
+
+## v2.12.0 이전 주요 변경
+
+전체 변경 내역은 `git log --oneline` 참조. 주요 breaking change만 정리:
+
+- **v2.11.0** — `serverCall` 강제. `price > 0`인 아이템 구매에서 `serverCall` 미지정 시 즉시 차단(이전엔 mock 경고만). 테스트 중에는 `dev.allowMockPurchase: true` 명시.
+- **v2.10.0** — `createTurnBased` 옵션 검증(`validateConfig`) 추가. 다음 항목 미선언 시 throw:
+  - `config.gameKey` (string, 필수)
+  - `config.module.{createInitialState, validateMove, applyMove, isTerminal}`
+  - `config.board.mount` (function)
+  - AI 모드 활성 시 `modes.ai.difficulties` (배열) + `modes.ai.onOpponentTurn` (function)
+  - MP 모드 활성 시 `config.roles` 또는 `modes.mp.roles` (2개 이상)
+- **v1.0.0 → v1.1.0** — 파일을 루트로 플랫화 (서브폴더 경로 깨짐). 원칙상 메이저지만 사용처 4곳뿐이라 마이너로 처리하고 소비자 동시 업데이트.

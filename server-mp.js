@@ -55,6 +55,10 @@ function createMultiplayerServer(io, options = {}) {
     const payload = rankMatch.buildReport(room, endData || {});
     if (!payload) return null;
     const endpoint = rankMatch.endpoint || '/api/match/result';
+    // /api/* → /api/v1/* 자동 라우팅 (이미 /api/v로 시작하면 그대로). main이 /api/* alias 유지 중이라 fail-safe.
+    const routedEndpoint = (endpoint.indexOf('/api/') === 0 && endpoint.indexOf('/api/v') !== 0)
+      ? '/api/v1' + endpoint.substring(4)
+      : endpoint;
     const baseUrl = process.env.KEENPLE_MAIN_URL || 'http://localhost:3100';
     const secret = process.env.GAME_SERVER_SECRET;
     if (!secret) {
@@ -62,7 +66,7 @@ function createMultiplayerServer(io, options = {}) {
       return null;
     }
     try {
-      const res = await fetch(baseUrl + endpoint, {
+      const res = await fetch(baseUrl + routedEndpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

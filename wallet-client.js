@@ -11,6 +11,7 @@
 
 var KEENPLE_MAIN_URL = process.env.KEENPLE_MAIN_URL || 'http://localhost:3100';
 var INTERNAL_SECRET = process.env.GAME_SERVER_SECRET;
+var API_PREFIX = '/api/v1';
 var _envWarned = false;
 function warnMissingEnvOnce() {
   if (_envWarned) return;
@@ -18,6 +19,15 @@ function warnMissingEnvOnce() {
   if (!process.env.KEENPLE_MAIN_URL) {
     console.warn('[wallet-client] KEENPLE_MAIN_URL 환경변수 미설정 — localhost:3100 기본값 사용. production에서는 반드시 설정 필요.');
   }
+}
+
+// /api/* → /api/v1/* 자동 라우팅. 이미 /api/v로 시작하면 그대로 (미래 v2 호환).
+// main이 /api/* alias 유지 중이라 fail-safe (치환 실패해도 깨지지 않음).
+function withApiPrefix(path) {
+  if (typeof path !== 'string') return path;
+  if (path.indexOf('/api/') !== 0) return path;
+  if (path.indexOf('/api/v') === 0) return path;
+  return API_PREFIX + path.substring(4);
 }
 
 function postJson(path, body, idempotencyKey) {
@@ -31,7 +41,7 @@ function postJson(path, body, idempotencyKey) {
   };
   if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
 
-  return fetch(KEENPLE_MAIN_URL + path, {
+  return fetch(KEENPLE_MAIN_URL + withApiPrefix(path), {
     method: 'POST',
     headers: headers,
     body: JSON.stringify(body),
@@ -48,7 +58,7 @@ function getJson(path) {
   if (!INTERNAL_SECRET) {
     return Promise.reject(new Error('GAME_SERVER_SECRET 환경변수가 필요합니다'));
   }
-  return fetch(KEENPLE_MAIN_URL + path, {
+  return fetch(KEENPLE_MAIN_URL + withApiPrefix(path), {
     headers: { 'x-internal-secret': INTERNAL_SECRET },
   }).then(function (res) {
     return res.json();
