@@ -279,7 +279,7 @@
       }
     }
     if (typeof config.roleLabel !== 'function' && (config.roles || (modes.mp && modes.mp.roles))) {
-      // 권장. 미선언시 역할 문자열이 그대로 UI에 노출됨
+      console.warn('[KeenpleShell] config.roleLabel(role) 미선언 — 게임오버 모달·HUD에 역할 문자열(예: "white")이 그대로 노출됩니다');
     }
   }
 
@@ -333,6 +333,10 @@
       if ('entryFee' in serverConfig) checkOptionMismatch('entryFee', defaultEntryFee, serverConfig.entryFee, context);
       const clientRankMatch = !!(modes.mp && modes.mp.rankMatch);
       if ('rankMatch' in serverConfig) checkOptionMismatch('rankMatch', clientRankMatch, !!serverConfig.rankMatch, context);
+      if ('payoutPolicy' in serverConfig && config.payoutPolicy != null) {
+        const clientPolicy = typeof config.payoutPolicy === 'function' ? 'custom' : config.payoutPolicy;
+        checkOptionMismatch('payoutPolicy', clientPolicy, serverConfig.payoutPolicy, context);
+      }
     }
 
     const _shellListeners = [];
@@ -364,6 +368,7 @@
     let hud = null;
     let turnDeadline = 0;
     let timerInterval = null;
+    let aiMoveTimer = null;
     let activeMatch = null;
     let undoStack = createUndoStack(getUndoMax(null));
     let undoUsedCount = 0;
@@ -462,12 +467,8 @@
     // ── HUD 초기화/업데이트 ─────────────────
     function ensureHud(data) {
       if (hud) return;
-      if (mode !== 'mp' && mode !== 'spectator') return;
       const rolesDef = getRolesDef();
-      if (!rolesDef) {
-        console.warn('[KeenpleShell] HUD 렌더 skip — config.roles 또는 modes.mp.roles 필요');
-        return;
-      }
+      if (!rolesDef) return;
       const players = (data && data.players) || [];
       const hudPlayers = rolesDef.map(role => {
         const p = players.find(pp => pp.role === role) || {};
@@ -555,7 +556,7 @@
 
       // AI 모드 선공 체크
       if (mode === 'ai' && modes.ai && modes.ai.onOpponentTurn) {
-        if (isAiTurn(state, extras)) setTimeout(triggerAiMove, 200);
+        if (isAiTurn(state, extras)) scheduleAiMove(200);
       }
     }
 
@@ -598,15 +599,21 @@
       if (term.terminal) { handleGameOver(term); return true; }
 
       if (mode === 'ai' && modes.ai && modes.ai.onOpponentTurn) {
-        if (isAiTurn(state)) setTimeout(triggerAiMove, 300);
+        if (isAiTurn(state)) scheduleAiMove(300);
       }
       return true;
     }
 
+    function scheduleAiMove(delay) {
+      if (aiMoveTimer) clearTimeout(aiMoveTimer);
+      aiMoveTimer = setTimeout(triggerAiMove, delay);
+    }
     async function triggerAiMove() {
-      if (gameOver) return;
+      aiMoveTimer = null;
+      if (mode !== 'ai' || gameOver || !state) return;
       try {
         const move = await modes.ai.onOpponentTurn(state, api);
+        if (mode !== 'ai' || gameOver) return;
         if (move) tryApplyLocalMove(move);
       } catch (e) { console.error('[shell] AI turn 실패', e); }
     }
@@ -624,7 +631,7 @@
       if (mode === 'ai' && modes.ai && modes.ai.onOpponentTurn) {
         while (undoStack.size() && isAiTurn(state)) popOnce();
         // 엣지: 스택 소진 후에도 AI 턴이면 (예: AI 선공 직후) AI에게 돌려줌 → 화면 얼음 방지
-        if (isAiTurn(state)) setTimeout(triggerAiMove, 300);
+        if (isAiTurn(state)) scheduleAiMove(300);
       }
       if (config.board.render) config.board.render(state, api);
       updateHudTurn();
@@ -757,6 +764,7 @@
       if (activeMatch && activeMatch.cancel) { activeMatch.cancel(); activeMatch = null; }
       destroyHud();
       stopTimerDisplay();
+      if (aiMoveTimer) { clearTimeout(aiMoveTimer); aiMoveTimer = null; }
       mode = null; myRole = null; gameOver = false; state = null;
       matchEloInfo = null; pendingEloUpdate = null;
       undoStack.clear();

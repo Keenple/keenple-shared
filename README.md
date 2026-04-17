@@ -77,3 +77,13 @@ BackToLobby.attach(document.getElementById('back-to-lobby-btn'), {
 - **1.x.y** 이내에서 backward-compatible만 추가
 - 인자 시그니처 변경·이벤트 이름 변경·**파일 경로 재구성** 등은 메이저(2.0.0) 올림
 - v1.0.0 → v1.1.0: 파일을 루트로 플랫화 (기존 서브폴더 경로 깨짐). 원칙상 메이저지만 사용처가 4곳뿐이라 마이너로 처리하고 소비자 측을 동시 업데이트.
+
+## 주요 Breaking change 이력
+
+- **v2.10.0** — `createTurnBased` 옵션 검증 추가 (`validateConfig`). 다음 항목이 미선언이면 throw:
+  - `config.gameKey` (string, 필수) — 이전엔 module/board만 필수였음
+  - `config.module.{createInitialState, validateMove, applyMove, isTerminal}`
+  - `config.board.mount` (function)
+  - AI 모드 활성 시 `modes.ai.difficulties` (배열) + `modes.ai.onOpponentTurn` (function)
+  - MP 모드 활성 시 `config.roles` 또는 `modes.mp.roles` (2개 이상)
+  - 기존 게임이 v2.9.x → v2.10.x 업그레이드 시 위 필수 항목 누락되면 즉시 throw. 콘솔 로그에서 어떤 항목인지 확인 후 선언 보강.
