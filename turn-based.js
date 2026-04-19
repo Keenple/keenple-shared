@@ -233,6 +233,139 @@
   window.addEventListener('unhandledrejection', (e) => showShellError('unhandledrejection', e.reason));
 
   // ============================================
+  //  Audio — wallet 사운드 (shared 소유, v2.16.0+)
+  //    AudioContext 싱글톤 + tone/noise primitive + 프리셋
+  //    재생 이벤트: entry_fee (차감), refund (환불),
+  //                item_purchase (구매 — 게임이 variant 선택)
+  //    음소거 미제공 — 필요 시 게임이 자체 처리 (아직 shared에는 API 없음)
+  // ============================================
+  const _audio = (function () {
+    let ctx = null;
+    let resumeBound = false;
+
+    function ensureCtx() {
+      if (ctx) return ctx;
+      const AC = (typeof window !== 'undefined') && (window.AudioContext || window.webkitAudioContext);
+      if (!AC) return null;
+      try { ctx = new AC({ latencyHint: 0 }); }
+      catch (e) { try { ctx = new AC(); } catch (_) { return null; } }
+      bindResume();
+      return ctx;
+    }
+
+    function bindResume() {
+      if (resumeBound || typeof document === 'undefined') return;
+      resumeBound = true;
+      const resume = function () {
+        if (ctx && ctx.state === 'suspended') { try { ctx.resume(); } catch (e) {} }
+      };
+      document.addEventListener('pointerdown', resume, { once: true, capture: true });
+      document.addEventListener('keydown', resume, { once: true, capture: true });
+    }
+
+    function tone(opts) {
+      const c = ensureCtx(); if (!c) return;
+      if (c.state === 'suspended') { try { c.resume(); } catch (e) {} }
+      const when = (typeof opts.when === 'number') ? opts.when : c.currentTime;
+      const dur = opts.dur != null ? opts.dur : 0.08;
+      const vol = opts.vol != null ? opts.vol : 0.10;
+      const attack = opts.attack != null ? opts.attack : 0;
+      const release = opts.release != null ? opts.release : Math.min(0.06, dur);
+      const o = c.createOscillator();
+      const g = c.createGain();
+      o.type = opts.type || 'sine';
+      o.frequency.setValueAtTime(opts.freq, when);
+      if (opts.toFreq != null) o.frequency.linearRampToValueAtTime(opts.toFreq, when + dur);
+      g.gain.setValueAtTime(0, when);
+      g.gain.linearRampToValueAtTime(vol, when + attack);
+      g.gain.linearRampToValueAtTime(0, when + dur + release);
+      o.connect(g).connect(c.destination);
+      o.start(when);
+      o.stop(when + dur + release + 0.02);
+    }
+
+    function noise(opts) {
+      const c = ensureCtx(); if (!c) return;
+      if (c.state === 'suspended') { try { c.resume(); } catch (e) {} }
+      const when = (typeof opts.when === 'number') ? opts.when : c.currentTime;
+      const dur = opts.dur != null ? opts.dur : 0.05;
+      const vol = opts.vol != null ? opts.vol : 0.08;
+      const cutoff = opts.cutoff != null ? opts.cutoff : 3000;
+      const frames = Math.max(1, Math.floor(c.sampleRate * dur));
+      const buffer = c.createBuffer(1, frames, c.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < frames; i++) data[i] = (Math.random() * 2 - 1);
+      const src = c.createBufferSource();
+      src.buffer = buffer;
+      const filt = c.createBiquadFilter();
+      filt.type = 'lowpass';
+      filt.frequency.value = cutoff;
+      const g = c.createGain();
+      g.gain.setValueAtTime(0, when);
+      g.gain.linearRampToValueAtTime(vol, when + 0.002);
+      g.gain.linearRampToValueAtTime(0, when + dur);
+      src.connect(filt).connect(g).connect(c.destination);
+      src.start(when);
+      src.stop(when + dur + 0.02);
+    }
+
+    // ── 프리셋: entry_fee (하강 두 톤) ───────────
+    function playEntryFee() {
+      const c = ensureCtx(); if (!c) return;
+      const now = c.currentTime;
+      tone({ freq: 520, toFreq: 390, type: 'triangle', dur: 0.06, vol: 0.12, release: 0.04, when: now });
+      tone({ freq: 390, toFreq: 290, type: 'triangle', dur: 0.08, vol: 0.10, release: 0.06, when: now + 0.06 });
+    }
+
+    // ── 프리셋: refund (상승 두 톤 — entry_fee 대칭) ───
+    function playRefund() {
+      const c = ensureCtx(); if (!c) return;
+      const now = c.currentTime;
+      tone({ freq: 290, toFreq: 390, type: 'triangle', dur: 0.06, vol: 0.10, release: 0.04, when: now });
+      tone({ freq: 390, toFreq: 520, type: 'triangle', dur: 0.08, vol: 0.12, release: 0.06, when: now + 0.06 });
+    }
+
+    // ── 프리셋: item_purchase variants ───────────
+    //   coin  : 짧은 고주파 ping + 살짝 noise (k-ching 축소 — 기본)
+    //   chime : 경쾌한 상승 3음 (C5-E5-G5 arpeggio, sine)
+    //   pop   : 짧은 저음 탭 (220→180Hz, sine)
+    //   soft  : 은은한 상승 한 음 (440→520Hz, sine, 길고 낮은 vol)
+    const PURCHASE_VARIANTS = {
+      coin: function (now) {
+        tone({ freq: 1000, toFreq: 1300, type: 'sine', dur: 0.04, vol: 0.10, release: 0.02, when: now });
+        noise({ dur: 0.05, vol: 0.07, cutoff: 3500, when: now + 0.03 });
+      },
+      chime: function (now) {
+        tone({ freq: 523, type: 'sine', dur: 0.05, vol: 0.09, release: 0.04, when: now });
+        tone({ freq: 659, type: 'sine', dur: 0.05, vol: 0.09, release: 0.04, when: now + 0.04 });
+        tone({ freq: 784, type: 'sine', dur: 0.07, vol: 0.09, release: 0.06, when: now + 0.08 });
+      },
+      pop: function (now) {
+        tone({ freq: 220, toFreq: 180, type: 'sine', dur: 0.06, vol: 0.13, attack: 0.003, release: 0.04, when: now });
+      },
+      soft: function (now) {
+        tone({ freq: 440, toFreq: 520, type: 'sine', dur: 0.10, vol: 0.08, attack: 0.01, release: 0.08, when: now });
+      },
+    };
+    const PURCHASE_VARIANT_NAMES = Object.keys(PURCHASE_VARIANTS);
+
+    function playItemPurchase(variant) {
+      const c = ensureCtx(); if (!c) return;
+      const name = (variant && PURCHASE_VARIANTS[variant]) ? variant : 'coin';
+      PURCHASE_VARIANTS[name](c.currentTime);
+    }
+
+    return {
+      variants: PURCHASE_VARIANT_NAMES,
+      tone: tone,
+      noise: noise,
+      playEntryFee: playEntryFee,
+      playRefund: playRefund,
+      playItemPurchase: playItemPurchase,
+    };
+  })();
+
+  // ============================================
   //  Main — createTurnBased
   // ============================================
   function validateConfig(config) {
@@ -281,6 +414,19 @@
     }
     if (typeof config.roleLabel !== 'function' && (config.roles || (modes.mp && modes.mp.roles))) {
       console.warn('[KeenpleShell] config.roleLabel(role) 미선언 — 게임오버 모달·HUD에 역할 문자열(예: "white")이 그대로 노출됩니다');
+    }
+    // audio (v2.16.0+) — 선택 옵션. 선언되었으면 형식 검증.
+    if (config.audio != null) {
+      if (typeof config.audio !== 'object') {
+        throw new Error('[KeenpleShell] config.audio 는 객체여야 합니다');
+      }
+      if (config.audio.purchaseSound != null) {
+        const allowed = _audio.variants;
+        if (allowed.indexOf(config.audio.purchaseSound) === -1) {
+          throw new Error('[KeenpleShell] config.audio.purchaseSound "' + config.audio.purchaseSound +
+            '" 는 허용된 값이 아닙니다 (' + allowed.join(' / ') + ')');
+        }
+      }
     }
   }
 
@@ -448,6 +594,8 @@
       //     serverCall: async () => ({ ok:true }),   // 실제 차감 호출. 생략 시 mock(클라만 감산, 새로고침 시 원복)
       //     onSuccess: () => { ... },                // 구매 성공 → 효과 발동
       //     onCancel:  () => { ... },                // 선택
+      //     sound:    'coin' | 'chime' | 'pop' | 'soft',  // v2.16.0+. 이 호출만 다른 사운드.
+      //                                              // 생략 시 config.audio.purchaseSound → 'coin'.
       //   }
       //
       // ⚠ 무르기(undo)는 shared가 이미 기본 버튼과 리스너를 달고 있음.
@@ -844,6 +992,7 @@
           price: undoItem.price,
           currency: undoItem.currency || 'coin',
           serverCall: undoItem.serverCall,
+          sound: undoItem.sound,
           onSuccess: () => { performUndoInternal(); undoUsedCount++; updateUndoBtnLabel(); },
         });
       } else {
@@ -1064,6 +1213,7 @@
           serverCall: opts.serverCall,
           onSuccess: opts.onSuccess,
           onCancel: opts.onCancel,
+          sound: opts.sound,
         });
       });
 
@@ -1175,7 +1325,7 @@
           if (curBal != null && price > 0) setBalanceLocal(currency, Math.max(0, curBal - price));
         }
         if (price > 0) showFeeDeductionAnimation(price, currency);
-        try { window.dispatchEvent(new CustomEvent('keenple:wallet-changed', { detail: { reason: 'item_purchase', amount: -price, currency: currency, mock: isMock } })); } catch (e) {}
+        try { window.dispatchEvent(new CustomEvent('keenple:wallet-changed', { detail: { reason: 'item_purchase', amount: -price, currency: currency, mock: isMock, sound: opts.sound } })); } catch (e) {}
         if (!isMock) {
           if (Keenple.Wallet && Keenple.Wallet.refresh) { try { Keenple.Wallet.refresh(); } catch (e) {} }
           refreshCoinBalance();
@@ -1619,14 +1769,24 @@
         if (user) { _nickname = user.nickname; _userId = user.id; }
       } catch (e) { showShellError('bootstrap-prechecks', e); }
 
-      // 코인 잔액 초기 조회 + 변화 이벤트 구독
-      if (defaultEntryFee > 0) {
-        refreshCoinBalance();
-        addShellListener(window, 'keenple:wallet-changed', (e) => {
-          if (e && e.detail && e.detail.mock) return;
-          refreshCoinBalance();
-        });
-      }
+      // 코인 잔액 초기 조회
+      if (defaultEntryFee > 0) refreshCoinBalance();
+      // wallet-changed 구독 — 사운드 재생 + (입장료 있는 게임은) 잔액 갱신.
+      // 사운드는 모든 게임에 적용 (defaultEntryFee와 무관 — item_purchase는 입장료 없는 게임에서도 발생).
+      addShellListener(window, 'keenple:wallet-changed', (e) => {
+        const detail = (e && e.detail) || {};
+        if (detail.mock) return;
+        // shared 소유 wallet 사운드 (v2.16.0+)
+        try {
+          if (detail.reason === 'entry_fee') _audio.playEntryFee();
+          else if (detail.reason === 'refund') _audio.playRefund();
+          else if (detail.reason === 'item_purchase') {
+            const variant = detail.sound || (config.audio && config.audio.purchaseSound) || 'coin';
+            _audio.playItemPurchase(variant);
+          }
+        } catch (err) { console.warn('[KeenpleShell] wallet sound 재생 실패', err); }
+        if (defaultEntryFee > 0) refreshCoinBalance();
+      });
 
       try {
       lobbyApi = Keenple.UI.Lobby({

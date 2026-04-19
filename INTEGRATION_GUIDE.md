@@ -451,6 +451,81 @@ v2.15.1+ 부터 `client-mp.js`는 `entryFeeError`에 리스너가 없으면 1회
 
 ---
 
+## 10. wallet 사운드 (v2.16.0+)
+
+shared가 소유한 wallet 흐름(입장료 차감·환불·아이템 구매)에 대해 **shared가 직접 Web Audio로 짧은 효과음을 재생**합니다. 게임 고유 사운드(move/capture 등)와는 분리된 레이어 — 게임은 아무것도 안 해도 기본 재생됩니다.
+
+### 10.1 재생 시점
+
+`window` 에 dispatch되는 `keenple:wallet-changed` 이벤트의 `detail.reason`에 따라:
+
+| reason | 언제 | 사운드 | 커스터마이즈 |
+|---|---|---|---|
+| `entry_fee` | MP 방 게임 시작 시 입장료 차감 | 하강 두 톤 (520→390→290Hz, triangle) | 없음 (고정) |
+| `refund` | 게임 취소/payout 환불 | 상승 두 톤 (290→390→520Hz) — entry_fee 대칭 | 없음 (고정) |
+| `item_purchase` | `buyItem`/`createItemButton`/`undoItem` 구매 성공 | 4개 프리셋 중 선택 (기본 `coin`) | 게임이 선택 |
+
+`detail.mock: true` 인 이벤트는 재생 skip (mock 구매는 실 차감 아님).
+
+### 10.2 item_purchase 프리셋 4종
+
+| 이름 | 느낌 | 합성 |
+|---|---|---|
+| `coin` (기본) | 카지노 k-ching 축소 — 짧은 고주파 ping + noise burst | 1000→1300Hz sine 40ms + filtered noise 50ms |
+| `chime` | 경쾌한 상승 3음 (보상감) | C5-E5-G5 sine arpeggio, 50ms 씩, 40ms stagger |
+| `pop` | 부드러운 저음 탭 (은은) | 220→180Hz sine 60ms |
+| `soft` | 은은한 상승 한 음 (미니멀) | 440→520Hz sine 100ms, 낮은 vol |
+
+### 10.3 게임 기본 프리셋 지정
+
+```js
+createTurnBased({
+  gameKey: 'chess',
+  ...
+  audio: {
+    purchaseSound: 'chime',  // 'coin' | 'chime' | 'pop' | 'soft'. 생략 시 'coin'.
+  },
+})
+```
+
+허용되지 않는 값이면 `createTurnBased` 호출 시 throw.
+
+### 10.4 호출별 override
+
+개별 구매에서 기본값과 다른 사운드를 쓰고 싶을 때 `sound` 필드 전달:
+
+```js
+// 특정 아이템만 'pop'
+api.buyItem({
+  itemId: 'chess_undo_premium',
+  price: 15,
+  serverCall: ...,
+  sound: 'pop',
+});
+
+// createItemButton도 동일
+api.createItemButton({ itemId: 'hint', price: 3, ..., sound: 'soft' });
+
+// 무르기 아이템 — modes 설정에 sound 필드 지원
+modes: {
+  local: {
+    undoItem: { price: 3, itemId: 'chess_undo', serverCall: ..., sound: 'pop' }
+  }
+}
+```
+
+호출별 `sound` 없으면 `config.audio.purchaseSound` → `'coin'` 순으로 fallback.
+
+### 10.5 자동재생 정책
+
+Web Audio의 자동재생 정책 대응으로 shared가 document에 1회성 `pointerdown`/`keydown` 리스너를 걸어 첫 상호작용에서 AudioContext를 `resume()`합니다. 게임이 별도 처리할 필요 없음.
+
+### 10.6 음소거는 지원하지 않음
+
+v2.16.0 현재 shared에는 mute API가 없습니다. "모든 사운드 끄기"가 필요하면 **게임이 자체 구현**하세요 (체스의 Sound 모듈이 참고 예시). 향후 필요성이 구체화되면 `audio.isMuted` 콜백 기반으로 도입 고려.
+
+---
+
 ## 새 게임 CLAUDE.md에 넣을 한 줄
 
 새 게임의 `CLAUDE.md` → `## 개발 시 반드시 지킬 것` 섹션(또는 최상단) 맨 앞에 다음 줄을 추가:

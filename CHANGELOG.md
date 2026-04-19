@@ -6,6 +6,38 @@
 
 ---
 
+## v2.16.0 (2026-04-20)
+
+### Added
+- **shared 소유 wallet 사운드** — `keenple:wallet-changed` 이벤트 발생 시 shared가 직접 Web Audio로 청각 피드백 재생. 게임 고유 사운드(move/capture 등)와 분리된, wallet 흐름 전용.
+  - `entry_fee` (입장료 차감): 하강 두 톤 (520→390→290Hz, triangle). 고정.
+  - `refund` (환불): 상승 두 톤 (290→390→520Hz, triangle) — entry_fee 대칭. 고정.
+  - `item_purchase` (아이템 구매 성공): **4개 프리셋 중 게임이 선택**.
+    - `coin` (기본) — 짧은 고주파 ping + 살짝 noise (k-ching 축소).
+    - `chime` — 경쾌한 상승 3음 (C5-E5-G5, sine).
+    - `pop` — 짧은 저음 탭 (220→180Hz, sine).
+    - `soft` — 은은한 상승 한 음 (440→520Hz, sine).
+- `createTurnBased` config 옵션: `audio: { purchaseSound: 'coin' | 'chime' | 'pop' | 'soft' }` — 게임 전체 기본 프리셋 지정. 생략 시 `'coin'`.
+- `buyItem(opts)` / `createItemButton(opts)` / `modes.{local|ai}.undoItem` 에 `sound` 필드 — **호출별 override** (config 기본값보다 우선). 예: 기본은 `'chime'`이지만 이 아이템만 `'pop'`.
+- 내부 `AudioContext` 싱글톤 + 첫 `pointerdown`/`keydown`에서 자동 `resume()` (자동재생 정책 대응). 모든 createTurnBased 인스턴스가 하나의 ctx 공유.
+
+### Changed
+- `keenple:wallet-changed` 구독 리스너 — 모든 게임에 바인딩되도록 변경 (이전엔 `defaultEntryFee > 0`일 때만). item_purchase는 입장료 없는 게임에서도 발생 가능.
+- `runPurchase` dispatch — detail에 `sound` 힌트 포함 (호출자가 `opts.sound` 넘겼을 때만).
+
+### Breaking ⚠
+- (없음 — audio 미선언 게임도 기본값 `'coin'`으로 자동 재생. 기존 무음 상태에서 소리가 추가되는 UX 변경이지만 API 호환.)
+
+### Fixed
+- (없음)
+
+### 마이그레이션 메모
+- **기존 게임 추가 작업 불필요** — `audio` 옵션 생략 시 `'coin'` 프리셋으로 자동 재생.
+- 기본 사운드가 게임 분위기와 맞지 않으면 `audio.purchaseSound`로 4개 프리셋 중 선택. 차감/환불 사운드는 shared 표준이라 커스터마이즈 불가 (일관성 의도).
+- **음소거 기능은 shared에 없음**. 필요하면 게임이 자체 구현 (체스의 Sound 모듈 참고).
+
+---
+
 ## v2.15.1 (2026-04-17)
 
 ### Added
