@@ -6,6 +6,26 @@
 
 ---
 
+## v2.23.0 (2026-04-20)
+
+### Added
+- **`api.endGame(result)` 의 `result.titleOverride` 필드** — 게임오버 모달 타이틀을 게임이 풍부하게 지정할 수 있게 함. 형식 `{ ko, en }` 문자열 객체. `computeGameOverCfg` 마지막 단계에서 자동 생성 문구(`roleLabel + ' 승리'`, MP reason 기반 `'상대 연결 끊김 — 승리!'` 등)를 덮어씀. 형식 불일치 시 `console.warn` + 무시.
+  - 사용 예: `api.endGame({ winner: 'cho', reason: 'captureKing', titleOverride: { ko: '초(楚) 승리!', en: 'Cho wins!' } })`
+  - 조사 처리, 이모지/강조, reason 별 formatting 등 커스텀 타이틀 필요한 게임용.
+
+### Changed
+- `computeGameOverCfg` — `result.titleOverride` 가 유효할 때만 title 덮어씀. `resultStr` (win/lose/draw 배지) 는 자동 추론 그대로 유지.
+
+### Breaking ⚠
+- (없음 — 새 필드. 기존 `api.endGame(result)` 호출 동작 변경 없음.)
+
+### 마이그레이션 메모
+- **MP 에서 titleOverride 쓸 땐 주의**: shell 의 자동 시점 판단(`isMe`)을 우회하므로, 게임이 내 역할 vs 상대 역할을 직접 고려해야 한다 (예: "상대 연결 끊김 — 승리!" 같은 시점 기반 문구를 override 하면 상대편에게는 어색한 문구가 나갈 수 있음).
+- **resultStr 배지 색상**: 여전히 자동 추론. 색상까지 커스텀이 필요하면 별도 제안.
+- **타이틀 자동 생성 유지가 필요한 경우**: `titleOverride` 를 그냥 생략하면 기존 로직 그대로.
+
+---
+
 ## v2.22.0 (2026-04-20)
 
 ### Added

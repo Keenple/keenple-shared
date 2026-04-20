@@ -1112,6 +1112,18 @@
         }
       }
 
+      // titleOverride (v2.23.0+) — 게임이 풍부한 타이틀 직접 지정. 자동 생성 덮어씀.
+      //   resultStr (win/lose/draw 배지 색상) 는 자동 추론 그대로 유지.
+      //   MP 에서 쓸 땐 isMe 시점 판단을 게임이 직접 처리해야 함.
+      if (extra.titleOverride != null) {
+        const to = extra.titleOverride;
+        if (typeof to === 'object' && typeof to.ko === 'string' && typeof to.en === 'string') {
+          title = to;
+        } else {
+          console.warn('[KeenpleShell] result.titleOverride 는 { ko, en } 문자열 객체여야 합니다 — 무시');
+        }
+      }
+
       const cfg = {
         title, result: resultStr,
         leave: { label: { ko: '나가기', en: 'Leave' }, onClick: () => backToLobby() },
