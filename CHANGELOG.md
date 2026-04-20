@@ -6,6 +6,33 @@
 
 ---
 
+## v2.18.0 (2026-04-20)
+
+### Added
+- **variant 분리 — 다변형 게임이 방 리스트·매칭 큐를 variant별로 분리** (장기 완전예측/행마예측/일반, 오목 6목/7목 등). `modes.mp` 하위 4개 옵션 추가. 전부 선택 — 미선언 시 기존 동작 그대로.
+  - `modes.mp.handshakeQuery: object` — socket.io handshake query로 서버에 variant 전달. shell이 `GameClient.connect({ query: ... })`로 패스스루. 서버가 `socket.handshake.query.variant`로 읽어 roomList emit 전 필터 가능.
+  - `modes.mp.roomListUrl: string` — HTTP poll URL 오버라이드 (기본 `'api/rooms'`). 예: `'api/rooms?variant=full'`.
+  - `modes.mp.filterRoomList: (room, ctx) => boolean` — 클라측 방 리스트 필터. socket `roomList` push + HTTP poll 결과 양쪽에 적용. `ctx = { gameKey, variant }`.
+  - `modes.mp.matchVariant: string` — `Keenple.Match.findGame`에 전달하는 `gameKey`를 `GAME_KEY::variant` composite로 합성. 같은 gameKey 다변형 게임의 매칭 큐 자연 분리.
+
+### Changed
+- `mp.onServer('roomList')` 리스너 — `applyRoomListFilter(rooms)` 경유 후 `lobbyApi.pushRooms`.
+- `Keenple.UI.Lobby` fetchRooms — `getRoomListUrl()` + `applyRoomListFilter()` 경유.
+- `ensureMp` — `modes.mp.handshakeQuery` 존재 시 `mp.connect({ query })` 주입.
+
+### Breaking ⚠
+- (없음 — 네 옵션 모두 선택. 기존 게임은 옵션 생략 시 현 동작.)
+
+### Fixed
+- (없음)
+
+### 알려진 한계 · 후속 작업
+- **joinRoom 서버 검증은 shared 강제 불가** — `filterRoomList`로 방을 숨겨도, 룸 코드를 직접 입력하면 참가 가능. 각 게임 서버의 `mp:joinRoom` 핸들러가 `room.variant === socket.handshake.query.variant` 검증을 직접 구현해야 참가까지 차단.
+- **`matchVariant` composite key 의존** — `Keenple.Match` SDK가 `gameKey`를 opaque 큐 버킷으로 다룬다는 전제. SDK가 gameKey로 API path나 DB 조회를 구성한다면 `::` 포함 키가 깨질 수 있음. 장기/체스에서 sanity check 후 문제 있으면 SDK에 별도 `matchKey` 파라미터 요청.
+- **variant leak via handshake** — 악의적 클라가 `handshakeQuery`를 스푸핑해 다른 variant 방 리스트 조회 가능. variant별 민감 정보 없으면 무시 가능. ELO/보상 차등 정책 도입 시 재검토.
+
+---
+
 ## v2.17.0 (2026-04-20)
 
 ### Added

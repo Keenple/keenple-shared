@@ -404,6 +404,19 @@
       if (typeof modes.mp.minPlayers !== 'number' || typeof modes.mp.maxPlayers !== 'number') {
         console.warn('[KeenpleShell] modes.mp.minPlayers / maxPlayers 미지정 — 서버 기본값을 사용합니다');
       }
+      // variant 분리 옵션 (v2.18.0+) — 다변형 게임용. 전부 선택.
+      if (modes.mp.handshakeQuery != null && (typeof modes.mp.handshakeQuery !== 'object' || Array.isArray(modes.mp.handshakeQuery))) {
+        throw new Error('[KeenpleShell] modes.mp.handshakeQuery 는 plain object 여야 합니다');
+      }
+      if (modes.mp.roomListUrl != null && typeof modes.mp.roomListUrl !== 'string') {
+        throw new Error('[KeenpleShell] modes.mp.roomListUrl 는 문자열이어야 합니다');
+      }
+      if (modes.mp.filterRoomList != null && typeof modes.mp.filterRoomList !== 'function') {
+        throw new Error('[KeenpleShell] modes.mp.filterRoomList 는 함수여야 합니다');
+      }
+      if (modes.mp.matchVariant != null && typeof modes.mp.matchVariant !== 'string') {
+        throw new Error('[KeenpleShell] modes.mp.matchVariant 는 문자열이어야 합니다');
+      }
     }
     if (Array.isArray(config.options)) {
       for (const opt of config.options) {
@@ -1434,11 +1447,34 @@
     }
     updateBackToMenuVisibility();
 
+    // ── roomList variant 필터 (v2.18.0+) ─────
+    //   filterRoomList(room, ctx) — 클라측 방 리스트 필터. socket push + HTTP poll 양쪽 적용.
+    //   roomListUrl — HTTP poll URL 오버라이드. 기본 'api/rooms'.
+    function getRoomListUrl() {
+      return (modes.mp && modes.mp.roomListUrl) || 'api/rooms';
+    }
+    function applyRoomListFilter(rooms) {
+      if (!Array.isArray(rooms)) return [];
+      const filterFn = modes.mp && modes.mp.filterRoomList;
+      if (typeof filterFn !== 'function') return rooms;
+      const ctx = {
+        gameKey: GAME_KEY,
+        variant: (modes.mp.handshakeQuery && modes.mp.handshakeQuery.variant) || modes.mp.matchVariant || null,
+      };
+      return rooms.filter(room => {
+        try { return !!filterFn(room, ctx); }
+        catch (e) { console.warn('[KeenpleShell] filterRoomList 에러 (room 제외)', e, room); return false; }
+      });
+    }
+
     // ── MP 연결 및 이벤트 처리 ─────────────────
     function ensureMp() {
       if (mp) return mp;
       mp = new GameClient({ gamePath: GAME_KEY });
-      mp.connect();
+      // v2.18.0+ handshakeQuery — 서버가 socket.handshake.query로 variant 읽어 roomList 필터 가능.
+      const connectOpts = {};
+      if (modes.mp && modes.mp.handshakeQuery) connectOpts.query = modes.mp.handshakeQuery;
+      mp.connect(connectOpts);
 
       mp.on('connectionError', (data) => {
         lobbyApi && lobbyApi.setStatus && lobbyApi.setStatus({ ko: '서버 연결 실패', en: 'Server connection failed' });
@@ -1593,7 +1629,8 @@
       });
 
       mp.onServer('roomList', (rooms) => {
-        if (lobbyApi && lobbyApi.pushRooms) lobbyApi.pushRooms(rooms);
+        const filtered = applyRoomListFilter(rooms);
+        if (lobbyApi && lobbyApi.pushRooms) lobbyApi.pushRooms(filtered);
       });
 
       // 게임이 자체적으로 받고 싶은 MP 이벤트 추가 구독 (config.mp.customListeners)
@@ -1714,8 +1751,13 @@
       }
       ensureMp();
       if (Keenple.Match && Keenple.Match.findGame) {
+        // v2.18.0+ matchVariant — 동일 gameKey 다변형 게임의 매칭 큐 분리.
+        // Keenple.Match SDK가 gameKey를 opaque 큐 버킷으로 다룬다는 전제. composite '::' 구분자.
+        const matchKey = (modes.mp && modes.mp.matchVariant)
+          ? GAME_KEY + '::' + modes.mp.matchVariant
+          : GAME_KEY;
         activeMatch = Keenple.Match.findGame({
-          gameKey: GAME_KEY,
+          gameKey: matchKey,
           onMatched: (data) => {
             activeMatch = null;
             matchEloInfo = { myElo: data.myElo, opponent: data.opponent };
@@ -1844,7 +1886,10 @@
         roomList: (modes.mp && modes.mp.enabled !== false)
           ? {
               enabled: true,
-              fetchRooms: () => fetch('api/rooms').then(r => r.json()).catch(() => []),
+              fetchRooms: () => fetch(getRoomListUrl())
+                .then(r => r.json())
+                .then(rooms => applyRoomListFilter(rooms))
+                .catch(() => []),
               pollInterval: 10000,
               onRoomClick: (r) => _userId
                 ? joinRoomWithConfirm(r.code, r.entryFee != null ? r.entryFee : defaultEntryFee)
