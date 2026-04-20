@@ -6,6 +6,31 @@
 
 ---
 
+## v2.20.0 (2026-04-20)
+
+### Added
+- **게임 시작 전 상대 이탈 즉시 처리** — lobby/matchmaking/상차림(formation) 단계에서 한쪽이 탭을 닫거나 나가면 남은 플레이어가 30초 기다리지 않고 **즉시 로비로 복귀**.
+- 서버 신규 이벤트 `peerLeftBeforeStart` — payload `{ role, nickname }`. `server-mp.js`의 `disconnect` 핸들러가 `!room.gameStarted && anyConnected` 분기에서 브로드캐스트 후 방 즉시 destroy.
+- `client-mp.js` passthroughEvents 에 `peerLeftBeforeStart` 추가 — `mp.on('peerLeftBeforeStart', ...)` 로 수신 가능.
+- `turn-based.js` 기본 핸들러 — `peerLeftBeforeStart` 수신 시 토스트("상대가 방에서 나갔습니다") + `backToLobby()`. shell 사용 게임은 별도 구현 불필요.
+
+### Changed
+- 서버 `disconnect` 핸들러 — 시작 전 상대 이탈 분기 추가. 기존 시작 후 경로(`playerDisconnected` + `reconnectTimeout` 타이머 + 기본 `endGame(disconnect)`)는 변경 없음.
+
+### Breaking ⚠
+- (없음 — 신규 이벤트 추가 + 서버 분기 추가. 기존 `playerDisconnected`/`gameOver(reason:disconnect)` 흐름은 그대로.)
+
+### Fixed
+- 장기 상차림 단계에서 상대 탭 닫기 시 30초 `reconnectTimeout` 대기 후에야 `endGame` 발화되던 어색한 UX. 이젠 즉시 로비 복귀.
+- lobby에서 방 만들고 상대 대기 중 방장 탭 닫기 → 빈 방 정리는 기존에도 동작했으나, 반대(참가자가 방 주인 대기 중 나감) 케이스에서 30초 대기하던 문제.
+
+### 마이그레이션 메모
+- **기존 게임 추가 작업 불필요** — shell 사용 게임(체스/장기/알까기)은 기본 핸들러로 자동 처리.
+- 저수준 `client-mp` 직접 사용 게임은 `mp.on('peerLeftBeforeStart', (data) => { ... })` 리스너 추가 권장. 미구현 시에도 서버는 방을 정리하므로 broken state는 아니지만, 남은 플레이어에게 "상대 나감" 피드백이 없음.
+- `onSurrender` lifecycle 은 시작 전 이탈에는 발화 안 함 (게임 룰 상 항복 아님). 시작 후 surrender 시에만 기존대로.
+
+---
+
 ## v2.19.0 (2026-04-20)
 
 ### Added

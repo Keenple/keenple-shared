@@ -699,6 +699,19 @@ function createMultiplayerServer(io, options = {}) {
         }
 
         if (!room.gameOver) {
+          // v2.20.0+: 시작 전 한쪽 이탈 + 상대 남음 → 즉시 정리.
+          //   기존엔 playerDisconnected + 30s 타이머 → 기본 endGame(disconnect) 로 빠지지만,
+          //   게임이 시작도 안 한 상태라 "게임오버 모달" UX 가 어색. peerLeftBeforeStart 로 남은
+          //   플레이어에게 알리고 방을 즉시 destroy. onSurrender 등 생명주기는 발화 안 함.
+          if (!room.gameStarted) {
+            broadcastToRoom(room, 'peerLeftBeforeStart', {
+              role: player.role,
+              nickname: player.nickname,
+            });
+            destroyRoom(currentRoomCode, 'peer_left_before_start');
+            return;
+          }
+
           broadcastToRoom(room, 'playerDisconnected', {
             role: player.role,
             nickname: player.nickname,

@@ -1592,6 +1592,11 @@
         disconnectOverlay.style.display = '';
         api.setGameNotice({ ko: '상대 연결 끊김... 재연결 대기 중', en: 'Opponent disconnected... waiting' });
       });
+      // v2.20.0+: 게임 시작 전 상대 이탈. 서버가 방을 이미 정리했으므로 로비로 바로 복귀.
+      mp.on('peerLeftBeforeStart', (data) => {
+        api.showToast({ ko: '상대가 방에서 나갔습니다', en: 'Opponent left the room' }, { type: 'info' });
+        backToLobby();
+      });
       mp.on('playerReconnected', () => {
         disconnectOverlay.style.display = 'none';
         api.setGameNotice(null);

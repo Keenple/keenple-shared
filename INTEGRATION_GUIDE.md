@@ -410,8 +410,9 @@ ctx.api.addAction('predictionCancel', {
 | `roomCreated` | 방 생성 성공 | `{ roomCode, playerId, role, minPlayers, maxPlayers, entryFee, serverConfig }` |
 | `roomJoined` | 방 참가/재접속/관전 성공 | `{ playerId, role, reconnected, options, entryFee, serverConfig, players, ... }` |
 | `playerJoined` | 상대가 방에 들어옴 | `{ playerId, role, nickname }` |
-| `playerDisconnected` | 상대 연결 끊김 | `{ playerId }` |
+| `playerDisconnected` | 상대 연결 끊김 (시작 후) | `{ playerId }` |
 | `playerReconnected` | 상대 재접속 | `{ playerId }` |
+| `peerLeftBeforeStart` (v2.20.0+) | **시작 전** 상대 이탈. 서버가 방을 이미 정리함 — 즉시 로비 복귀. | `{ role, nickname }` |
 | `readyToStart` | 최소 인원 충족 | `{ players }` |
 | `gameStart` | 게임 시작 | `{ players, gameState, options, entryFee, serverConfig }` |
 | `gameOver` | 게임 종료 (broadcastToAll) | `{ ...data }` (게임이 넘긴 데이터 전부) |

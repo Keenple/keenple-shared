@@ -259,6 +259,7 @@ class GameClient {
       'playerJoined',
       'playerDisconnected',
       'playerReconnected',
+      'peerLeftBeforeStart',  // v2.20.0+: 게임 시작 전 상대 이탈 → 남은 플레이어 즉시 로비 복귀
       'readyToStart',
       'gameStart',
       'gameOver',
