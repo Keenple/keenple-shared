@@ -6,6 +6,37 @@
 
 ---
 
+## v2.19.0 (2026-04-20)
+
+### Added
+- **MP 옵션 위치 일관화** — `customListeners` 를 `modes.mp` 하위로 통합. 이제 모든 MP 관련 옵션(`enabled`, `roles`, `minPlayers`, `maxPlayers`, `rankMatch`, `handshakeQuery`, `roomListUrl`, `filterRoomList`, `matchVariant`, `customListeners`)이 `modes.mp.*` 단일 경로에 있음.
+- `validateConfig` — `modes.mp.customListeners` / `config.mp.customListeners` 구조 검증 (객체 + 값이 함수). 양쪽에 동시 선언 시 warn.
+
+### Changed
+- `config.mp.customListeners` 읽기 지점 — `modes.mp.customListeners` 우선, `config.mp.customListeners` 는 legacy fallback. legacy 사용 시 1회 deprecation warning.
+
+### Breaking ⚠
+- (없음 — legacy `config.mp.customListeners` fallback 유지. 다음 major 에 제거 예정.)
+
+### Fixed
+- `config.mp.customListeners` 가 유일한 `config.mp.*` 사용처였던 비대칭. 여러 게임이 `modes.mp` 안에 선언해도 동작 안 하는 UX 함정(장기 이식 중 MP 전체 먹통) 해소.
+
+### 마이그레이션 메모
+- **새 게임**: 처음부터 `modes.mp.customListeners` 에 선언.
+- **기존 게임**: 선언 위치만 `config.mp` → `modes.mp` 로 옮기면 됨. 내용 변경 없음.
+  ```diff
+  - mp: { customListeners: { moveApplied: (data, api) => {...} } }
+    modes: {
+      mp: {
+        enabled: true,
+  +     customListeners: { moveApplied: (data, api) => {...} },
+      }
+    }
+  ```
+- legacy 경로는 deprecation warn 뜨지만 동작. 다음 major(v3.0) 에서 제거.
+
+---
+
 ## v2.18.0 (2026-04-20)
 
 ### Added

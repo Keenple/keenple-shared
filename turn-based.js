@@ -417,6 +417,24 @@
       if (modes.mp.matchVariant != null && typeof modes.mp.matchVariant !== 'string') {
         throw new Error('[KeenpleShell] modes.mp.matchVariant 는 문자열이어야 합니다');
       }
+      // customListeners (v2.19.0 통합) — modes.mp 가 표준. config.mp 는 legacy fallback.
+      const newListeners = modes.mp.customListeners;
+      const legacyListeners = config.mp && config.mp.customListeners;
+      function checkListenersShape(listeners, where) {
+        if (typeof listeners !== 'object' || Array.isArray(listeners)) {
+          throw new Error('[KeenpleShell] ' + where + '.customListeners 는 객체여야 합니다');
+        }
+        Object.keys(listeners).forEach(ev => {
+          if (typeof listeners[ev] !== 'function') {
+            throw new Error('[KeenpleShell] ' + where + '.customListeners.' + ev + ' 는 함수여야 합니다');
+          }
+        });
+      }
+      if (newListeners != null) checkListenersShape(newListeners, 'modes.mp');
+      if (legacyListeners != null) checkListenersShape(legacyListeners, 'config.mp');
+      if (newListeners && legacyListeners) {
+        console.warn('[KeenpleShell] customListeners 가 modes.mp 와 config.mp 양쪽에 선언됨 — modes.mp 가 우선됩니다. config.mp.customListeners 는 제거하세요.');
+      }
     }
     if (Array.isArray(config.options)) {
       for (const opt of config.options) {
@@ -1633,10 +1651,16 @@
         if (lobbyApi && lobbyApi.pushRooms) lobbyApi.pushRooms(filtered);
       });
 
-      // 게임이 자체적으로 받고 싶은 MP 이벤트 추가 구독 (config.mp.customListeners)
-      if (config.mp && config.mp.customListeners) {
-        Object.keys(config.mp.customListeners).forEach(ev => {
-          mp.onServer(ev, (data) => config.mp.customListeners[ev](data, api));
+      // 게임이 자체적으로 받고 싶은 MP 이벤트 추가 구독.
+      // v2.19.0+: modes.mp.customListeners 가 표준. config.mp.customListeners 는 legacy fallback (다음 major에 제거 예정).
+      const customListeners = (modes.mp && modes.mp.customListeners)
+                           || (config.mp && config.mp.customListeners);
+      if (modes.mp && !modes.mp.customListeners && config.mp && config.mp.customListeners) {
+        console.warn('[KeenpleShell] config.mp.customListeners 는 deprecated (v2.19.0+) — modes.mp.customListeners 로 이동하세요. 다음 major 버전에서 제거됩니다.');
+      }
+      if (customListeners) {
+        Object.keys(customListeners).forEach(ev => {
+          mp.onServer(ev, (data) => customListeners[ev](data, api));
         });
       }
 
