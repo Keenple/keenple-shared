@@ -66,10 +66,11 @@ const result = await wallet.spend({ userId, amount: 1, ... });
 modes: {
   ai: {
     enabled: true,
+    pickerSubtitle: {ko:'선택 후에도 방 옵션에서 바꿀 수 있어요', en:'You can change this later in room options'},
     difficulties: [
-      { id: 'easy',   label: {ko:'쉬움',   en:'Easy'} },
-      { id: 'medium', label: {ko:'보통',   en:'Normal'} },
-      { id: 'hard',   label: {ko:'어려움', en:'Hard'} },
+      { id: 'easy',   label: {ko:'쉬움',   en:'Easy'},   description: {ko:'탐색 깊이 2 — 초보자용', en:'Depth 2 — for beginners'} },
+      { id: 'medium', label: {ko:'보통',   en:'Normal'}, description: {ko:'탐색 깊이 3 — 기본 전술', en:'Depth 3 — basic tactics'} },
+      { id: 'hard',   label: {ko:'어려움', en:'Hard'},   description: {ko:'탐색 깊이 4 — 기동성까지 평가', en:'Depth 4 — evaluates mobility'} },
     ],
     onOpponentTurn: async (state) => computeAiMove(state),
     isOpponentTurn: (state) => state.turn === <GAME_SPECIFIC_OPPONENT_TURN>,
@@ -78,12 +79,25 @@ modes: {
 },
 ```
 
+### AI picker 텍스트 배치 원칙 (v2.25.0+)
+
+| 위치 | 옵션 | 용도 |
+|---|---|---|
+| 화면 최상단 (카드 위) | `modes.ai.pickerSubtitle` | **전체 공통** UX 안내 (난이도와 무관). 예: "선택 후에도 바꿀 수 있어요" |
+| 카드 안 | `difficulties[i].description` | **난이도별 차이** 설명. 예: "탐색 깊이 3 — 기본 전술" |
+
+- 둘 다 `{ ko, en }` 문자열 객체. v2.25.0부터 `validateConfig` 가 형식 강제.
+- `description` 은 `<p>` 로 렌더되며 `.keenple-picker-card p` 스타일.
+- 난이도별 차이를 `pickerSubtitle` 에 모아 쓰면 시각적 매칭이 약해진다 (장기가 한 번 시도했다가 카드 안으로 이관한 선례).
+
 ### 비권장
 
 ```js
 // ❌ isOpponentTurn 생략 → v2.8.1+ 경고 + AI 응답 실패 가능
 // ❌ aiSide: 'black'  ← v2.8.0까지 존재. 지금은 무시됨
 // ❌ 게임 코드에서 undoStack 수동 관리 → shared와 충돌
+// ❌ description: "탐색 깊이 3"  ← v2.25.0+ 는 { ko, en } 강제. 문자열이면 throw
+// ❌ 난이도별 차이를 pickerSubtitle 하나에 몰아쓰기 → 카드-설명 시각적 매칭 약함
 ```
 
 ### 배경 (v2.8.1, v2.9.0, v2.9.1 = 3연패)

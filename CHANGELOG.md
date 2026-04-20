@@ -6,6 +6,28 @@
 
 ---
 
+## v2.25.0 (2026-04-21)
+
+### Added
+- **`modes.ai.difficulties[i].description` 형식 검증** — `validateConfig` 이 `description` 선언 시 `{ ko, en }` 문자열 객체를 강제. 위반 시 throw. 기존엔 잘못된 포맷이면 picker 렌더 시 `dataKo={undefined}` 로 DOM 이 깨지는데 원인이 불명확했음. `pickerSubtitle` 과 동일한 `_checkI18n` 재사용.
+
+### Docs
+- **AI picker 텍스트 배치 정식 문서화** — `difficulty.description` 옵션(카드 안 `<p>` 로 렌더, `.keenple-picker-card p` 스타일) 은 v2.14.0부터 구현돼 있었으나 CHANGELOG · INTEGRATION_GUIDE 어디에도 명시되지 않았음. 체스(v2.2~) · 예측 장기(v2.25 직전 이관) 실사용 중. INTEGRATION_GUIDE `§2 AI 모드` 에 옵션 + 배치 원칙 섹션 추가.
+- 배치 원칙: **카드별 차이는 `difficulties[i].description`, 전체 공통 UX 안내는 `modes.ai.pickerSubtitle`**. 난이도별 차이를 subtitle 하나에 몰아쓰지 말 것 (장기 이관 중 직접 확인된 선례).
+
+### Changed
+- (없음)
+
+### Breaking ⚠
+- (없음 — 기존 소비 게임 audit 결과 체스(`게임/game.js:609-613`) · 예측 장기(`프로젝트/game.js:1665-1669`) 모두 이미 `{ ko, en }` 포맷 사용. 잘못된 포맷 게임 0건 확인 후 릴리즈. 오목 · 알까기 · game-template 은 AI 모드 미사용.)
+
+### 마이그레이션 메모
+- 기존 게임: 이미 `description: { ko, en }` 쓰고 있으면 변경 불필요.
+- 신규 게임: `description` 선언 시 반드시 `{ ko, en }` 객체. 문자열 선언은 `validateConfig` 가 throw 하므로 picker 모달이 뜨지 않음 → 즉시 발견.
+- 난이도 공통 안내는 `pickerSubtitle` 로 (v2.21.0+), 난이도별 차이는 `description` 으로.
+
+---
+
 ## v2.24.0 (2026-04-20)
 
 ### Fixed

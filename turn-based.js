@@ -408,6 +408,10 @@
       }
       if (modes.ai.pickerTitle != null) _checkI18n(modes.ai.pickerTitle, 'modes.ai.pickerTitle');
       if (modes.ai.pickerSubtitle != null) _checkI18n(modes.ai.pickerSubtitle, 'modes.ai.pickerSubtitle');
+      // difficulties[i].description (v2.25.0+) — 선언 시 { ko, en } 강제. 없으면 OK.
+      modes.ai.difficulties.forEach((d, i) => {
+        if (d && d.description != null) _checkI18n(d.description, 'modes.ai.difficulties[' + i + '].description');
+      });
     }
     if (modes.mp && modes.mp.enabled) {
       const roles = config.roles || modes.mp.roles;
