@@ -677,6 +677,22 @@
       },
       removeAction: (id) => unmountCustomAction(id),
       refreshActions: (id) => refreshCustomActions(id),
+      // 공식 게임 종료 API (v2.22.0+).
+      //   result: { winner?, reason?, ...extras } — 기존 computeGameOverCfg 포맷.
+      //   AI/local 에서 자체 로직으로 종료 판정 시 사용. MP 는 서버 권위라 no-op + 경고.
+      //   중복 호출은 handleGameOver 의 guard 로 차단됨.
+      endGame: (result) => {
+        if (!mode) {
+          console.warn('[KeenpleShell] api.endGame — 게임 시작 전 호출 무시');
+          return;
+        }
+        if (mode === 'mp') {
+          console.warn('[KeenpleShell] api.endGame 은 MP 모드에서 지원되지 않습니다. 항복은 mp.surrender() 를 사용하세요.');
+          return;
+        }
+        if (mode === 'spectator') return;
+        handleGameOver(result || {});
+      },
     };
 
     // ── Custom overlays 슬롯 생성 ─────────────
@@ -1111,6 +1127,7 @@
     }
 
     function handleGameOver(result) {
+      if (gameOver) return;  // v2.22.0+ 중복 호출 가드 (api.endGame + mp.on('gameOver') 동시 수신 등)
       gameOver = true;
       gameOverState = result;
       lastEndData = result;
@@ -2036,6 +2053,16 @@
     if (config.topBar != null && typeof config.topBar !== 'boolean') {
       throw new Error('[KeenpleShell] createGameMenu: config.topBar 는 boolean 이어야 합니다');
     }
+    // hero/header/footer 슬롯 (v2.22.0+) — HTMLElement | ((ctx) => HTMLElement), ctx = { t, getLang }
+    function _checkSlot(val, where) {
+      if (val == null) return;
+      if (val instanceof HTMLElement) return;
+      if (typeof val === 'function') return;
+      throw new Error('[KeenpleShell] createGameMenu: ' + where + ' 는 HTMLElement 또는 함수여야 합니다');
+    }
+    _checkSlot(config.header, 'config.header');
+    _checkSlot(config.hero, 'config.hero');
+    _checkSlot(config.footer, 'config.footer');
 
     var mount = config.mount
       ? (typeof config.mount === 'string' ? document.querySelector(config.mount) : config.mount)
@@ -2050,14 +2077,41 @@
     // 타이틀
     document.title = t(config.title.ko, config.title.en);
 
-    var container = el('div', { class: 'keenple-game-menu' }, [
-      el('h1', {
-        class: 'keenple-game-menu-title',
-        dataKo: config.title.ko,
-        dataEn: config.title.en,
-      }, config.title.ko),
-      buildCards(config.modes),
-    ]);
+    // 슬롯 렌더 (v2.22.0+) — ctx = { t, getLang }
+    var slotCtx = {
+      t: t,
+      getLang: function () { return (typeof Keenple !== 'undefined' && Keenple.getLang) ? Keenple.getLang() : 'ko'; },
+    };
+    function _resolveSlot(slot, where) {
+      if (slot == null) return null;
+      if (slot instanceof HTMLElement) return slot;
+      if (typeof slot === 'function') {
+        try {
+          var out = slot(slotCtx);
+          if (out instanceof HTMLElement) return out;
+          if (out != null) console.warn('[KeenpleShell] createGameMenu: ' + where + ' 함수는 HTMLElement 를 반환해야 합니다');
+          return null;
+        } catch (e) {
+          console.error('[KeenpleShell] createGameMenu: ' + where + ' 렌더 실패', e);
+          return null;
+        }
+      }
+      return null;
+    }
+    var headerEl = _resolveSlot(config.header, 'config.header');
+    var heroEl = _resolveSlot(config.hero, 'config.hero');
+    var footerEl = _resolveSlot(config.footer, 'config.footer');
+
+    var titleEl = el('h1', {
+      class: 'keenple-game-menu-title',
+      dataKo: config.title.ko,
+      dataEn: config.title.en,
+    }, config.title.ko);
+    var cardsEl = buildCards(config.modes);
+
+    // 레이아웃: header → title → hero → cards → footer
+    var children = [headerEl, titleEl, heroEl, cardsEl, footerEl].filter(Boolean);
+    var container = el('div', { class: 'keenple-game-menu' }, children);
 
     mount.appendChild(container);
 

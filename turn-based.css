@@ -597,7 +597,8 @@ body.keenple-shell {
   margin: 8px 0 24px;
   font-size: 32px;
   font-weight: 800;
-  background: linear-gradient(135deg, var(--keenple-surrender, #ff6b6b), #6ba3ff);
+  /* v2.22.0+ — --keenple-title-gradient 로 덮어쓰면 !important 없이 교체 가능 */
+  background: var(--keenple-title-gradient, linear-gradient(135deg, var(--keenple-surrender, #ff6b6b), #6ba3ff));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;

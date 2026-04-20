@@ -6,6 +6,30 @@
 
 ---
 
+## v2.22.0 (2026-04-20)
+
+### Added
+- **`api.endGame(result)` 공식 게임 종료 API** — legacy-authoritative 게임(장기 `captureKing` 등)에서 자체 로직으로 종료 판정 시 사용. `result: { winner?, reason?, ...extras }` 는 기존 `computeGameOverCfg` 포맷과 동일.
+  - AI/local: `handleGameOver` 직통.
+  - MP: `console.warn` + no-op — 서버가 권위자이므로 항복은 `mp.surrender()` 로 명시 유도. auto-redirect 대신 hint 메시지.
+  - Spectator / 게임 시작 전 호출: 경고 없이 무시.
+- **`createGameMenu` hero / header / footer 슬롯** — `HTMLElement | ((ctx) => HTMLElement)`, ctx = `{ t, getLang }`. 레이아웃: `header` → 타이틀 → `hero` → 카드 → `footer`. 기존 `::before` CSS 우회를 실 DOM 으로 이관해 접근성/i18n/lazy-load 처리 가능.
+- **`--keenple-title-gradient` CSS 변수** — `.keenple-game-menu-title` 하드코딩 gradient 를 변수로 노출. 게임이 `!important` 없이 덮어쓰기 가능. 미지정 시 기존 gradient 폴백.
+
+### Changed
+- `handleGameOver` — 중복 호출 가드(`if (gameOver) return`) 추가. `api.endGame` + `mp.on('gameOver')` 동시 수신 같은 레이스 무력화.
+
+### Breaking ⚠
+- (없음 — 전부 additive. 기존 호출/설정 동작 그대로.)
+
+### 마이그레이션 메모
+- **api.endGame**: MP 모드에서 호출 시 경고 + no-op 이다. auto-redirect 로 `mp.surrender()` 연결하지 않는다는 점 주의 — 명시적으로 `mp.surrender()` 호출할 것.
+- **createGameMenu 슬롯**: 기존 `config.title` + `config.modes` 만 쓰던 게임은 동작 변화 없음. 장식을 `::before` 로 넣던 게임은 `hero` 슬롯으로 이관 권장.
+- **title-gradient 변수**: `.keenple-picker-title` 는 현재 gradient 아니라 이번 범위에서 제외 (필요 시 별도 제안).
+- **main SDK 이관 대기**: `.kp-lobby-title` 의 `--kp-title-gradient` 변수화는 main 팀 쪽 작업. 장기는 여전히 `.kp-lobby-title` 오버라이드 시 `!important` 필요 (main 릴리즈 전까지).
+
+---
+
 ## v2.21.0 (2026-04-20)
 
 ### Added
