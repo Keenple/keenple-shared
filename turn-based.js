@@ -415,6 +415,10 @@
     if (typeof config.roleLabel !== 'function' && (config.roles || (modes.mp && modes.mp.roles))) {
       console.warn('[KeenpleShell] config.roleLabel(role) 미선언 — 게임오버 모달·HUD에 역할 문자열(예: "white")이 그대로 노출됩니다');
     }
+    // onBackToMenu (v2.17.0+) — 선택 콜백. 선언 시 shell이 lobby에 "메뉴" 버튼 자동 주입.
+    if (config.onBackToMenu != null && typeof config.onBackToMenu !== 'function') {
+      throw new Error('[KeenpleShell] config.onBackToMenu 는 함수여야 합니다');
+    }
     // audio (v2.16.0+) — 선택 옵션. 선언되었으면 형식 검증.
     if (config.audio != null) {
       if (typeof config.audio !== 'object') {
@@ -807,6 +811,7 @@
         }
       }
       mode = startMode;
+      updateBackToMenuVisibility();
       gameOver = false;
       gameOverState = null;
       undoStack = createUndoStack(getUndoMax(startMode));
@@ -1089,6 +1094,7 @@
       document.getElementById('keenple-ai-picker').style.display = 'none';
       document.getElementById('keenple-room-options').style.display = 'none';
       if (lobbyApi) { lobbyApi.show(); lobbyApi.setStatus && lobbyApi.setStatus(''); lobbyApi.showCancel && lobbyApi.showCancel(false); }
+      updateBackToMenuVisibility();
     }
 
     // ── 입장 확인 모달 (입장료 > 0 시) ───────────
@@ -1388,6 +1394,45 @@
         onReset: backToLobby,
       });
     }
+
+    // ── Back to pre-lobby Menu 버튼 (v2.17.0+) ─
+    // onBackToMenu 선언된 게임만: lobby(+ai-picker/room-options) 상태에서 bottom-left fixed 버튼 표시.
+    // 게임 중에는 keenple-back-to-lobby-btn 이 대신 표시되므로 자연스럽게 숨김.
+    let backToMenuBtn = null;
+    if (typeof config.onBackToMenu === 'function') {
+      backToMenuBtn = document.createElement('button');
+      backToMenuBtn.type = 'button';
+      backToMenuBtn.id = 'keenple-back-to-menu-btn';
+      backToMenuBtn.className = 'keenple-back-to-lobby back-to-lobby-fixed keenple-back-to-menu';
+      backToMenuBtn.setAttribute('data-ko', '← 메뉴');
+      backToMenuBtn.setAttribute('data-en', '← Menu');
+      backToMenuBtn.textContent = t('← 메뉴', '← Menu');
+      document.body.appendChild(backToMenuBtn);
+      if (typeof BackToLobby !== 'undefined') {
+        BackToLobby.attach(backToMenuBtn, {
+          isInProgress: () => !!mode && !gameOver,
+          onReset: () => {
+            try { destroy({ removeDom: true }); } catch (e) { showShellError('onBackToMenu:destroy', e); }
+            try { config.onBackToMenu(); } catch (e) { showShellError('onBackToMenu:callback', e); }
+          },
+        });
+      } else {
+        // BackToLobby 미로드 환경 — 기본 confirm fallback
+        backToMenuBtn.addEventListener('click', () => {
+          if (!!mode && !gameOver) {
+            if (!window.confirm(t('진행 중인 게임이 종료됩니다. 메뉴로 돌아가시겠습니까?', 'This will end the current game. Return to menu?'))) return;
+          }
+          try { destroy({ removeDom: true }); } catch (e) { showShellError('onBackToMenu:destroy', e); }
+          try { config.onBackToMenu(); } catch (e) { showShellError('onBackToMenu:callback', e); }
+        });
+      }
+    }
+    function updateBackToMenuVisibility() {
+      if (!backToMenuBtn) return;
+      // mode 미설정(로비/ai-picker/room-options 중) 시에만 표시.
+      backToMenuBtn.style.display = mode ? 'none' : '';
+    }
+    updateBackToMenuVisibility();
 
     // ── MP 연결 및 이벤트 처리 ─────────────────
     function ensureMp() {
@@ -1843,9 +1888,31 @@
 
     bootstrap().catch(e => showShellError('bootstrap', e));
 
-    function destroy() {
+    // destroy(opts?)
+    //   opts.removeDom === true → shell이 mount한 body-level DOM 전체 철거
+    //   (pre-lobby 메뉴로 복귀하는 경로에서 사용. v2.17.0+)
+    function destroy(opts) {
+      opts = opts || {};
       try { backToLobby(); } catch (e) {}
       removeShellListeners();
+      if (opts.removeDom) {
+        const ids = [
+          'keenple-game-area',
+          'keenple-ai-picker',
+          'keenple-room-options',
+          'keenple-disconnect-overlay',
+          'keenple-spectator-banner',
+          'keenple-back-to-menu-btn',
+          'keenple-shell-error',
+        ];
+        for (const id of ids) {
+          const node = document.getElementById(id);
+          if (node && node.parentNode) node.parentNode.removeChild(node);
+        }
+        if (lobbyApi && typeof lobbyApi.destroy === 'function') {
+          try { lobbyApi.destroy(); } catch (e) {}
+        }
+      }
     }
 
     return {

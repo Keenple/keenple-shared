@@ -6,6 +6,32 @@
 
 ---
 
+## v2.17.0 (2026-04-20)
+
+### Added
+- **pre-lobby 메뉴 백 내비게이션** — 변형이 여러 개인 게임(장기 완전예측/행마예측/일반, 체스 변형 등)이 shell 안에서 pre-lobby 메뉴로 복귀할 수 있는 표준 경로.
+- `createTurnBased` config 옵션: `onBackToMenu: () => void` — 선언 시 shell이 자동으로:
+  - lobby 상태(`mode` 미설정)에서 좌하단 fixed "← 메뉴" 버튼 표시. 게임 상태에서는 자동 숨김 (back-to-lobby 버튼이 대신 노출).
+  - 버튼 클릭 시 `BackToLobby` 패턴 재사용 — 게임 진행 중이면 confirm 모달 → MP 세션 정리 → `destroy({ removeDom:true })` → `onBackToMenu()` 콜백.
+  - `BackToLobby` UMD 미로드 환경에서는 `window.confirm` fallback.
+- `createTurnBased().destroy(opts)` — `opts.removeDom === true` 시 shell이 mount한 body-level DOM 7종(`#keenple-game-area`, `#keenple-ai-picker`, `#keenple-room-options`, `#keenple-disconnect-overlay`, `#keenple-spectator-banner`, `#keenple-back-to-menu-btn`, `#keenple-shell-error`) + `lobbyApi.destroy()`(존재 시) 철거. 기존 `destroy()` 호출자는 영향 없음 — opts 생략 시 기존 동작 그대로.
+
+### Changed
+- `startGame` / `backToLobby` 내부에서 back-to-menu 버튼 visibility 갱신. (`mode` 변화에 따라 자동 show/hide.)
+
+### Breaking ⚠
+- (없음 — onBackToMenu 미선언 게임은 기존 동작 그대로.)
+
+### Fixed
+- (없음)
+
+### 마이그레이션 메모
+- **기존 게임 추가 작업 불필요** — `onBackToMenu` 옵션 생략 시 메뉴 버튼 안 뜸.
+- 변형이 여러 개인 게임만 `onBackToMenu`에 "현재 페이지를 pre-lobby 메뉴로 되돌리는 로직"을 넘기면 됨. 예: `location.reload()` 또는 SPA 라우터 push.
+- `onBackToMenu` 콜백 전에 shell DOM이 이미 정리된 상태이므로, 콜백에서 새 `createGameMenu(...)` 호출 가능.
+
+---
+
 ## v2.16.0 (2026-04-20)
 
 ### Added
