@@ -6,6 +6,25 @@
 
 ---
 
+## v2.21.0 (2026-04-20)
+
+### Added
+- **`config.gameName` 폴백 체인 확장** — `gameName` 미지정 시 `config.title` → `gameKey` 순으로 폴백. `createGameMenu` 에서 쓰는 `title` 과 키 일관화. 변형별 이름이 다른 게임(예측 장기 등)은 기존대로 `gameName` 을 명시해야 한다 (폴백은 실수 방지 안전망).
+- **AI picker 타이틀/부제 커스텀** — `modes.ai.pickerTitle` / `modes.ai.pickerSubtitle` (`{ko,en}`) 옵션. 미지정 시 기본 문구("AI 난이도 선택"). `.keenple-picker-subtitle` CSS 클래스 신규.
+- **`config.topBar: false` opt-out** — shell 자동 `Keenple.UI.TopBar` 호출 건너뜀. 게임이 변형별 제목 등으로 TopBar 를 직접 제어하는 경우 로딩 깜빡임(슬러그 → 실제 이름) 방지. `createTurnBased` · `createGameMenu` 양쪽 지원. 미래 object 확장 여지 둠.
+
+### Changed
+- `renderAiPicker(mount, difficulties, onPick, onBack, opts)` 시그니처 — 5번째 인자 `opts: { title?, subtitle? }` 추가. 기존 호출(4인자) 동작 변경 없음.
+
+### Breaking ⚠
+- (없음 — 전부 additive. 기존 설정/호출 그대로 동작.)
+
+### 마이그레이션 메모
+- 기존 게임 추가 작업 불필요. 깜빡임 이슈가 있던 변형 게임은 `config.topBar: false` 로 전환 권장.
+- `config.topBar` 타입은 현재 boolean 만 허용. `{ enabled: false, ... }` 형태 object 확장은 추후 필요 시 추가.
+
+---
+
 ## v2.20.0 (2026-04-20)
 
 ### Added

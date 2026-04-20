@@ -95,9 +95,14 @@
   // ============================================
   //  AI Picker / Room Options Modals
   // ============================================
-  function renderAiPicker(mount, difficulties, onPick, onBack) {
+  function renderAiPicker(mount, difficulties, onPick, onBack, opts) {
+    opts = opts || {};
     mount.innerHTML = '';
-    mount.appendChild(el('h1', { class: 'keenple-picker-title', dataKo: 'AI 난이도 선택', dataEn: 'Select AI Difficulty' }, 'AI 난이도 선택'));
+    const title = opts.title || { ko: 'AI 난이도 선택', en: 'Select AI Difficulty' };
+    mount.appendChild(el('h1', { class: 'keenple-picker-title', dataKo: title.ko, dataEn: title.en }, title.ko));
+    if (opts.subtitle) {
+      mount.appendChild(el('p', { class: 'keenple-picker-subtitle', dataKo: opts.subtitle.ko, dataEn: opts.subtitle.en }, opts.subtitle.ko));
+    }
     const cards = el('div', { class: 'keenple-picker-cards' });
     difficulties.forEach(d => {
       const card = el('div', { class: 'keenple-picker-card', onclick: () => onPick(d) }, [
@@ -395,6 +400,14 @@
       if (typeof modes.ai.isOpponentTurn !== 'function') {
         console.warn('[KeenpleShell] modes.ai.isOpponentTurn 미선언 — state.turn 비교 기반 기본 감지가 실패하면 AI가 응답하지 않습니다');
       }
+      // pickerTitle / pickerSubtitle (v2.21.0+) — AI 난이도 선택 화면 커스텀. 선택.
+      function _checkI18n(val, where) {
+        if (typeof val !== 'object' || val == null || typeof val.ko !== 'string' || typeof val.en !== 'string') {
+          throw new Error('[KeenpleShell] ' + where + ' 는 { ko, en } 문자열 객체여야 합니다');
+        }
+      }
+      if (modes.ai.pickerTitle != null) _checkI18n(modes.ai.pickerTitle, 'modes.ai.pickerTitle');
+      if (modes.ai.pickerSubtitle != null) _checkI18n(modes.ai.pickerSubtitle, 'modes.ai.pickerSubtitle');
     }
     if (modes.mp && modes.mp.enabled) {
       const roles = config.roles || modes.mp.roles;
@@ -450,6 +463,10 @@
     if (config.onBackToMenu != null && typeof config.onBackToMenu !== 'function') {
       throw new Error('[KeenpleShell] config.onBackToMenu 는 함수여야 합니다');
     }
+    // topBar opt-out (v2.21.0+) — false 면 shell 자동 TopBar 호출 건너뜀. 미래 object 확장 여지.
+    if (config.topBar != null && typeof config.topBar !== 'boolean') {
+      throw new Error('[KeenpleShell] config.topBar 는 boolean 이어야 합니다 (false = 자동 TopBar 비활성)');
+    }
     // audio (v2.16.0+) — 선택 옵션. 선언되었으면 형식 검증.
     if (config.audio != null) {
       if (typeof config.audio !== 'object') {
@@ -469,7 +486,9 @@
     validateConfig(config);
 
     const GAME_KEY = config.gameKey;
-    const GAME_NAME = config.gameName || { ko: GAME_KEY, en: GAME_KEY };
+    // gameName 폴백 체인 (v2.21.0+): gameName → title (createGameMenu 와 공유) → gameKey.
+    // 변형별 이름이 다른 게임은 gameName 를 반드시 명시할 것 (title 는 메뉴 공통 이름).
+    const GAME_NAME = config.gameName || config.title || { ko: GAME_KEY, en: GAME_KEY };
     const MOD = config.module;
     const modes = config.modes || { local: { enabled: true } };
     const options = config.options || [];
@@ -586,7 +605,9 @@
     // ── SDK — TopBar + Lobby ─────────────────
     let lobbyApi = null;
     if (Keenple.UI && Keenple.UI.setTheme) Keenple.UI.setTheme({});
-    if (Keenple.UI && Keenple.UI.TopBar) Keenple.UI.TopBar({ gameName: GAME_NAME });
+    // topBar opt-out (v2.21.0+) — config.topBar === false 면 shell 자동 TopBar 호출 건너뜀.
+    // 게임이 자체적으로 Keenple.UI.TopBar 를 제어하는 경우 로딩 깜빡임 방지용.
+    if (config.topBar !== false && Keenple.UI && Keenple.UI.TopBar) Keenple.UI.TopBar({ gameName: GAME_NAME });
 
     // ── API 객체 ─────────────────────────────
     const api = {
@@ -1739,6 +1760,9 @@
       }, () => {
         picker.style.display = 'none';
         if (lobbyApi) lobbyApi.show();
+      }, {
+        title: modes.ai.pickerTitle,
+        subtitle: modes.ai.pickerSubtitle,
       });
     }
 
@@ -2009,15 +2033,18 @@
     if (!Array.isArray(config.modes) || config.modes.length === 0) {
       throw new Error('[KeenpleShell] createGameMenu: config.modes (배열, 1개 이상) 필수');
     }
+    if (config.topBar != null && typeof config.topBar !== 'boolean') {
+      throw new Error('[KeenpleShell] createGameMenu: config.topBar 는 boolean 이어야 합니다');
+    }
 
     var mount = config.mount
       ? (typeof config.mount === 'string' ? document.querySelector(config.mount) : config.mount)
       : document.body;
 
-    // SDK TopBar 자동 구성
+    // SDK TopBar 자동 구성 (config.topBar === false 면 건너뜀, v2.21.0+)
     if (typeof Keenple !== 'undefined' && Keenple.UI) {
       if (Keenple.UI.setTheme && config.theme) Keenple.UI.setTheme(config.theme);
-      if (Keenple.UI.TopBar) Keenple.UI.TopBar({ gameName: config.title });
+      if (config.topBar !== false && Keenple.UI.TopBar) Keenple.UI.TopBar({ gameName: config.title });
     }
 
     // 타이틀
