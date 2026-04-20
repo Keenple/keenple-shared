@@ -6,6 +6,26 @@
 
 ---
 
+## v2.24.0 (2026-04-20)
+
+### Fixed
+- **`matchVariant` 재설계 — composite gameKey 제거** — v2.18.0 이후 `modes.mp.matchVariant` 가 `gameKey: 'janggi::mode1'` 형태 composite key 로 전송돼 main `/api/match/queue` 에서 400 거부되던 문제. 장기 등 다변형 게임이 매칭을 전혀 못 쓰던 상태였음.
+  - v2.24.0+ 부터 gameKey 는 순수 `GAME_KEY` 유지, variant 는 별도 필드로 전달: `Keenple.Match.findGame({ gameKey, variant, ... })`.
+  - main 측 (커밋 `be529d4`) 이 `(gameKey, variant)` 쌍 큐 분리 배포 완료 → shared 한 줄 패치로 복구.
+  - ELO/리더보드는 gameKey 기준 유지 (variant 로 쪼개지 않음). NULL variant 는 NULL 끼리만 매칭.
+
+### Changed
+- `validateConfig` — `modes.mp.matchVariant` 값이 main 제약(`^[a-z0-9_-]{1,32}$`) 에 맞는지 조기 검증. 위반 시 throw (이전엔 main 이 400 으로 늦게 반환).
+
+### Breaking ⚠
+- (없음 — v2.18.0~v2.23.0 의 matchVariant 는 main 에서 이미 400 거부 상태였으므로 동작 복구이지 깨는 변경 아님. `modes.mp.matchVariant` 옵션은 유지, 내부 전송 방식만 교체.)
+
+### 마이그레이션 메모
+- 장기 등 다변형 게임: v2.18.0~v2.23.0 에서 임시로 `matchVariant` 제거한 코드를 `matchVariant: difficultyMode` 한 줄로 복구. variant 는 소문자·숫자·언더스코어·하이픈·최대 32자 내에서.
+- 기존 게임(variant 미사용): 아무 변경 필요 없음.
+
+---
+
 ## v2.23.0 (2026-04-20)
 
 ### Added

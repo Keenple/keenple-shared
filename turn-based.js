@@ -427,8 +427,14 @@
       if (modes.mp.filterRoomList != null && typeof modes.mp.filterRoomList !== 'function') {
         throw new Error('[KeenpleShell] modes.mp.filterRoomList 는 함수여야 합니다');
       }
-      if (modes.mp.matchVariant != null && typeof modes.mp.matchVariant !== 'string') {
-        throw new Error('[KeenpleShell] modes.mp.matchVariant 는 문자열이어야 합니다');
+      if (modes.mp.matchVariant != null) {
+        if (typeof modes.mp.matchVariant !== 'string') {
+          throw new Error('[KeenpleShell] modes.mp.matchVariant 는 문자열이어야 합니다');
+        }
+        // main /api/match/queue 제약: ^[a-z0-9_-]{1,32}$ (v2.24.0+ 동기화)
+        if (!/^[a-z0-9_-]{1,32}$/.test(modes.mp.matchVariant)) {
+          throw new Error('[KeenpleShell] modes.mp.matchVariant 는 /^[a-z0-9_-]{1,32}$/ 패턴이어야 합니다 (main 매칭 API 제약)');
+        }
       }
       // customListeners (v2.19.0 통합) — modes.mp 가 표준. config.mp 는 legacy fallback.
       const newListeners = modes.mp.customListeners;
@@ -1833,13 +1839,12 @@
       }
       ensureMp();
       if (Keenple.Match && Keenple.Match.findGame) {
-        // v2.18.0+ matchVariant — 동일 gameKey 다변형 게임의 매칭 큐 분리.
-        // Keenple.Match SDK가 gameKey를 opaque 큐 버킷으로 다룬다는 전제. composite '::' 구분자.
-        const matchKey = (modes.mp && modes.mp.matchVariant)
-          ? GAME_KEY + '::' + modes.mp.matchVariant
-          : GAME_KEY;
+        // v2.24.0+ matchVariant — gameKey 는 게임 식별자로 유지, variant 는 별도 필드.
+        // main /api/match/queue 가 (gameKey, variant) 쌍으로 큐 분리 (variant 패턴 ^[a-z0-9_-]{1,32}$).
+        // ELO/리더보드는 gameKey 기준 유지. NULL variant 는 NULL 끼리만 매칭.
         activeMatch = Keenple.Match.findGame({
-          gameKey: matchKey,
+          gameKey: GAME_KEY,
+          variant: (modes.mp && modes.mp.matchVariant) || null,
           onMatched: (data) => {
             activeMatch = null;
             matchEloInfo = { myElo: data.myElo, opponent: data.opponent };
