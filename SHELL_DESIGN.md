@@ -123,8 +123,8 @@ const shell = KeenpleShell.createTurnBased({
     // 반환값(설정)이 game.options에 병합됨.
     onBeforeGameStart: async (context) => ({ formation: 'cho' }),
 
-    // 게임오버 모달에 추가 정보 표시 (예: ELO, 예측 결과 등)
-    gameOverExtras: (result) => HTMLElement,
+    // 게임오버 모달에 추가 정보 표시 (예: ELO, 예측 결과 등). 상세: §5.4
+    gameOverExtras: (result, api) => HTMLElement,
 
     // 자체 오버레이 (장기 prediction/scan 같은 것)
     customOverlays: {
@@ -172,6 +172,12 @@ api.applyLocalMove(move)   // 로컬 모드에서 move 실행 (shell이 validate
 api.showToast(msg, type)   // 알림
 api.showConfirm(msg)       // confirm 모달
 api.setBoardCursor(type)   // 보드 커서 스타일
+api.endGame(result)        // 공식 게임 종료 알림 (v2.22.0+). AI/local 전용.
+                           //   result: { winner?, reason?, titleOverride?, ...extras }
+                           //   MP 모드 호출 시 console.warn + no-op — 서버가 권위자.
+                           //   Spectator / 게임 시작 전 호출: 조용히 무시.
+                           //   중복 호출은 handleGameOver 내부 가드로 차단.
+                           //   상세: §5.4 GameOver 3종 API 역할 분리
 ```
 
 ---
@@ -288,6 +294,35 @@ hooks: {
 ```
 
 게임이 `api.showOverlay('promotion')` 호출 → shell이 해당 오버레이 표시.
+
+### 5.4 GameOver 3종 API 역할 분리 (v2.22.0 + v2.23.0)
+
+legacy-authoritative 게임(게임 자체 로직으로 승패 판정: 장기의 궁 잡기, 무르기 한도 초과, 예측 미스 등) 이 풍부한 종료 UI 를 구성할 때 세 API 를 역할 별로 조합한다. 꼼수(내부 state 조작, 직접 modal DOM 생성) 대신 공식 경로만 써야 재연결/rematch/다국어/테마가 깨지지 않는다.
+
+| API | 책임 | 시그니처 | 예시 |
+|-----|------|---------|------|
+| `api.endGame(result)` | 게임 종료 알림 — GameOverModal 자동 표시 | `{ winner?, reason?, titleOverride?, ...extras }` | AI/local 에서 궁 잡기 판정 시 호출 |
+| `result.titleOverride` | 모달 타이틀 문자열 교체 | `{ ko: string, en: string }` | `{ ko: '초(楚) 승리!', en: 'Cho wins!' }` |
+| `hooks.gameOverExtras` | 모달 본문에 추가 DOM 삽입 | `(result, api) => HTMLElement` | ELO 변화, 예측 적중률, replay 버튼 등 |
+
+**어느 걸 언제 쓰나**
+
+- **기본 자동 문구("楚 승리")로 충분** → `api.endGame({ winner, reason })` 만. `config.roleLabel` 로 역할 문자열만 꾸미면 끝.
+- **조사 처리, 이모지, reason 별 스타일 분기 필요** → `titleOverride` 추가. 자동 생성 덮어씀.
+- **모달 본문에 ELO/replay/통계 등 구조화된 DOM 필요** → `gameOverExtras` 훅. 타이틀/배지는 건드리지 않음.
+
+**절대 하지 말 것**
+- MP 모드에서 `api.endGame` 호출 — 서버가 권위자. 항복은 `mp.surrender()`. shell 은 `console.warn` + no-op 으로 방어하지만 애초에 호출하지 말 것.
+- 내부 state 직접 mutate 해서 종료 판정 우회 — reconnect/rematch 타이밍에 깨짐.
+- 자체 modal DOM 생성 — 다국어 전환·backdrop·rematch 버튼이 shell 과 분리되어 유지 비용 폭증.
+
+**MP 에서 `titleOverride` 쓸 때 주의**
+
+shell 의 자동 시점 판단(`isMe = myRole === winner`)이 MP reason 기반 문구("상대 연결 끊김 — 승리!")를 양쪽 시점에 맞춰 생성한다. `titleOverride` 는 이 자동 분기를 전부 덮어쓰므로, 게임이 `api.getRole()` 로 내 역할을 직접 확인해서 시점별로 다른 문자열을 넘겨야 한다. 일반적으로 MP 에서는 자동 문구로 충분하므로 `titleOverride` 사용을 피하는 편이 안전.
+
+**`resultStr` 배지 색상**
+
+win/lose/draw/info 배지 색상은 자동 추론 유지. 지금은 override 없음 — 색상까지 커스텀 필요 시 별도 제안.
 
 ---
 
