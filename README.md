@@ -2,6 +2,23 @@
 
 Keenple 게임들이 공유하는 공통 모듈.
 
+## 📖 읽는 순서 (처음 온 개발자용)
+
+| 단계 | 문서 | 언제 |
+|------|------|------|
+| 1 | 이 README 아래 **체크리스트** | 5분, 주의사항 파악 |
+| 2 | [`INTEGRATION_GUIDE.md`](./INTEGRATION_GUIDE.md) | 실전 이식 패턴 (v2.11+ 기준) |
+| 3 | [`SHELL_DESIGN.md`](./SHELL_DESIGN.md) | 선언형 config 옵션 전체 레퍼런스 |
+| 4 | [`CHANGELOG.md`](./CHANGELOG.md) | 버전별 breaking change |
+
+**레퍼런스 게임** (실제 이식 완료된 코드 읽기):
+- `체스 게임/` — 규칙 기반, **서버 권위 검증** 패턴
+- `킨플 알까기/` — 물리 기반, **클라 신뢰 + merge** 패턴
+
+**신규 게임 시작**: [`keenple-game-template`](https://github.com/Keenple/keenple-game-template) — `LOCAL_DEV_QUICK_START.md`로 시작.
+
+---
+
 ## 새 게임 이식 담당 (Claude / 개발자) 체크리스트
 
 **먼저 [INTEGRATION_GUIDE.md](./INTEGRATION_GUIDE.md)를 읽으세요** (v2.11+ 실전 가이드, 체스 v2.2~v2.10 에피소드 요약). 체스가 v2.2 → v2.10 동안 reference 역할을 하며 같은 영역에서 반복 패치가 나왔습니다. 다음 게임은 이 지점들을 건너뛰세요.
