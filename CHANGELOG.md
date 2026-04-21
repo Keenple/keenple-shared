@@ -6,6 +6,27 @@
 
 ---
 
+## v2.26.0 (2026-04-21)
+
+### Added
+- **`modes.mp.matchVariantLabel: { ko, en }`** — 랭크 매칭 대기 오버레이에 표시될 variant 의 사람용 i18n 라벨. `Keenple.Match` SDK(main 커밋 `8ca377f`) 가 `"[variantLabel] 상대를 찾는 중..."` 형태로 기본 문구 앞에 prefix. variant 머신 id (`modes.mp.matchVariant`) 와 별개.
+  - 예: `matchVariant: 'full-prediction'` + `matchVariantLabel: { ko: '완전예측', en: 'Full Prediction' }` → 오버레이 "[완전예측] 상대를 찾는 중..." / "[Full Prediction] Finding opponent...".
+  - 다변형 게임이 3개 variant 를 동시 큐에 띄우면 사용자가 자기가 어떤 variant 대기 중인지 명확히 인지 가능 → variant 불일치로 대기만 길어지는 케이스 UX 개선.
+- `validateConfig` — `modes.mp.matchVariantLabel` 선언 시 `{ ko, en }` 형식 강제. 잘못된 포맷이면 throw.
+
+### Changed
+- `validateConfig` 내부 `_checkI18n` 헬퍼를 AI 블록 밖으로 끌어올려 AI/MP 양쪽에서 공유. 동작 변화 없음.
+
+### Breaking ⚠
+- (없음 — 새 옵션 추가. 미선언 게임은 이전 동작 그대로 "상대를 찾는 중..." 만 표시됨.)
+
+### 마이그레이션 메모
+- **장기 등 다변형 게임**: `modes.mp.matchVariantLabel` 한 줄 추가로 variant 인지 UX 개선. 기존 `matchVariant` 머신 id 는 그대로.
+- **variant 미사용 게임**: 변경 필요 없음. `matchVariantLabel` 미선언 시 SDK 는 기본 문구만 표시.
+- **Main 의존성**: main 커밋 `8ca377f` 가 라이브 배포되어 있어야 오버레이에 반영됨. SDK 가 해당 필드를 아직 받지 못하는 환경(구버전 main)에서는 shared 가 넘겨도 무시되므로 크래시 없이 no-op.
+
+---
+
 ## v2.25.0 (2026-04-21)
 
 ### Added

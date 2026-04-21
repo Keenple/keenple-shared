@@ -390,6 +390,12 @@
       throw new Error('[KeenpleShell] config.board.mount (function) 이 없습니다');
     }
     const modes = config.modes || {};
+    // AI/MP 양쪽에서 쓰는 i18n 객체 검증 헬퍼.
+    function _checkI18n(val, where) {
+      if (typeof val !== 'object' || val == null || typeof val.ko !== 'string' || typeof val.en !== 'string') {
+        throw new Error('[KeenpleShell] ' + where + ' 는 { ko, en } 문자열 객체여야 합니다');
+      }
+    }
     if (modes.ai && modes.ai.enabled) {
       if (!Array.isArray(modes.ai.difficulties) || modes.ai.difficulties.length === 0) {
         throw new Error('[KeenpleShell] modes.ai.difficulties (non-empty array) 가 필요합니다');
@@ -401,11 +407,6 @@
         console.warn('[KeenpleShell] modes.ai.isOpponentTurn 미선언 — state.turn 비교 기반 기본 감지가 실패하면 AI가 응답하지 않습니다');
       }
       // pickerTitle / pickerSubtitle (v2.21.0+) — AI 난이도 선택 화면 커스텀. 선택.
-      function _checkI18n(val, where) {
-        if (typeof val !== 'object' || val == null || typeof val.ko !== 'string' || typeof val.en !== 'string') {
-          throw new Error('[KeenpleShell] ' + where + ' 는 { ko, en } 문자열 객체여야 합니다');
-        }
-      }
       if (modes.ai.pickerTitle != null) _checkI18n(modes.ai.pickerTitle, 'modes.ai.pickerTitle');
       if (modes.ai.pickerSubtitle != null) _checkI18n(modes.ai.pickerSubtitle, 'modes.ai.pickerSubtitle');
       // difficulties[i].description (v2.25.0+) — 선언 시 { ko, en } 강제. 없으면 OK.
@@ -440,6 +441,9 @@
           throw new Error('[KeenpleShell] modes.mp.matchVariant 는 /^[a-z0-9_-]{1,32}$/ 패턴이어야 합니다 (main 매칭 API 제약)');
         }
       }
+      // matchVariantLabel (v2.26.0+) — 매칭 대기 오버레이에 표시될 variant i18n 라벨.
+      // SDK(Keenple.Match) 가 "[variantLabel] 상대를 찾는 중..." 형태로 합성. variant 머신 id 와 별개.
+      if (modes.mp.matchVariantLabel != null) _checkI18n(modes.mp.matchVariantLabel, 'modes.mp.matchVariantLabel');
       // customListeners (v2.19.0 통합) — modes.mp 가 표준. config.mp 는 legacy fallback.
       const newListeners = modes.mp.customListeners;
       const legacyListeners = config.mp && config.mp.customListeners;
@@ -1846,9 +1850,11 @@
         // v2.24.0+ matchVariant — gameKey 는 게임 식별자로 유지, variant 는 별도 필드.
         // main /api/match/queue 가 (gameKey, variant) 쌍으로 큐 분리 (variant 패턴 ^[a-z0-9_-]{1,32}$).
         // ELO/리더보드는 gameKey 기준 유지. NULL variant 는 NULL 끼리만 매칭.
+        // v2.26.0+ matchVariantLabel — SDK 오버레이에 "[라벨] 상대를 찾는 중..." 형태로 prefix.
         activeMatch = Keenple.Match.findGame({
           gameKey: GAME_KEY,
           variant: (modes.mp && modes.mp.matchVariant) || null,
+          variantLabel: (modes.mp && modes.mp.matchVariantLabel) || undefined,
           onMatched: (data) => {
             activeMatch = null;
             matchEloInfo = { myElo: data.myElo, opponent: data.opponent };
