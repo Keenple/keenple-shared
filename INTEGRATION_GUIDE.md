@@ -668,16 +668,16 @@ ctx = {
 
 `variant`는 `handshakeQuery.variant`를 우선 참조하고, 없으면 `matchVariant`. 둘 다 없으면 `null`. 대부분의 경우 ctx로 충분하고, 외부 클로저 접근 불필요.
 
-### 12.5 matchVariant의 composite key 메커니즘
+### 12.5 matchVariant 전송 방식 (v2.24.0+)
 
-shared가 `Keenple.Match.findGame({ gameKey: GAME_KEY + '::' + matchVariant })`로 호출합니다:
+shared가 `Keenple.Match.findGame({ gameKey: GAME_KEY, variant: matchVariant })` 형태로 `variant` 를 별도 필드로 전달합니다. main `/api/match/queue` 는 `(gameKey, variant)` 쌍으로 큐를 분리:
 
-- `matchVariant: 'full'` → 큐 키 `'janggi::full'`
-- `matchVariant: 'general'` → 큐 키 `'janggi::general'`
-- 두 변형은 자연스럽게 다른 큐에 들어가 서로 매칭되지 않음.
-- 매칭 성사 후 실제 소켓 연결은 `gamePath: GAME_KEY` (원래 키) 그대로 — 서버 경로 변경 없음.
+- `matchVariant: 'full'` → 큐 키 `(janggi, full)`
+- `matchVariant: 'general'` → 큐 키 `(janggi, general)`
+- 두 variant 는 서로 매칭되지 않으며 `null` variant 는 `null` 끼리만 매칭.
+- ELO/리더보드는 `gameKey` 기준으로 통합 유지 (variant 로 쪼개지 않음).
 
-**⚠ 전제**: Keenple.Match SDK가 `gameKey`를 opaque한 큐 버킷으로만 사용해야 함. SDK가 이 값으로 API path 구성이나 DB 조회를 수행한다면 `::` 포함 composite 키가 깨질 수 있음. 도입 후 sanity check 권장 — 문제 있으면 SDK에 별도 `matchKey` 파라미터 요청.
+v2.24.0 이전엔 `gameKey: GAME_KEY + '::' + matchVariant` composite key 로 전송했으나 main 이 400 거부하여 제거됨.
 
 ### 12.6 단일 variant 또는 variant 없는 게임
 
