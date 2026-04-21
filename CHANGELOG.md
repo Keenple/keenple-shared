@@ -6,6 +6,30 @@
 
 ---
 
+## v2.27.0 (2026-04-21)
+
+### Added
+- **`matchRoomCode` 자동 주입 — main idempotency 활성화** — `reportMatch(room, endData)` 가 `buildReport` pass-through 직후 `room.code` 를 payload 에 `matchRoomCode` 로 자동 삽입. main 커밋 `3aaf541` (POST `/api/v1/match/result` 멱등성) 과 맞물려 동일 matchRoomCode 로 두 번 호출되면 main 이 `{ idempotent: true, ... }` 반환 → ELO 이중 적용 차단.
+  - 게임이 `buildReport` 에서 `matchRoomCode` 를 직접 설정한 경우 그 값 존중 (`payload.matchRoomCode == null` 가드).
+  - `room.code` 없는 비정상 상황에서는 skip (`if (room.code && ...)`).
+  - main 스펙: `matchRoomCode` 형식 `^[A-Z0-9]{6}$` — shared 발급 room.code 형식과 일치.
+
+### Changed
+- `server-mp.js` `reportMatch` — buildReport 결과에 matchRoomCode 주입 로직 3줄 추가. 기존 payload 구조 유지.
+
+### Breaking ⚠
+- (없음 — 추가 필드만 주입. 구버전 main 환경에선 무시되어 크래시 없음. 게임이 직접 matchRoomCode 설정해둔 경우 덮어쓰지 않아 하위 호환.)
+
+### 마이그레이션 메모
+- **모든 랭크 매칭 게임**: 변경 필요 없음. shared 업그레이드만으로 idempotency 자동 적용. 체스 · 예측 장기 등 shared 쓰는 모든 게임이 즉시 보호됨.
+- **main 제안(buildReport 에 한 줄 추가) 을 이미 따라간 게임**: 게임이 설정한 값이 우선되므로 충돌 없음. 굳이 되돌릴 필요 없음.
+- **친선전 · 방 코드 직접 입력**: `reportMatch` 는 `room.matched && rankMatch.enabled` 일 때만 호출 (`server-mp.js:375`) → 랭크 매칭이 아닌 방은 영향 없음.
+
+### 설계 메모
+- 메인 원안은 "게임별 buildReport 에 한 줄씩 추가" 였으나 각 게임이 누락하면 그 게임만 ELO 이중 적용 재발 가능 → shared chokepoint 에서 자동 주입하는 편이 안전. 신규 게임도 별도 조치 없이 보호됨.
+
+---
+
 ## v2.26.0 (2026-04-21)
 
 ### Added

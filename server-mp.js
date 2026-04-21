@@ -54,6 +54,9 @@ function createMultiplayerServer(io, options = {}) {
     }
     const payload = rankMatch.buildReport(room, endData || {});
     if (!payload) return null;
+    // v2.27.0+ — main idempotency (커밋 3aaf541). room.code 를 matchRoomCode 로 자동 주입.
+    // 게임이 buildReport 에서 직접 설정한 경우 그 값 존중 (덮어쓰지 않음).
+    if (room.code && payload.matchRoomCode == null) payload.matchRoomCode = room.code;
     const endpoint = rankMatch.endpoint || '/api/match/result';
     // /api/* → /api/v1/* 자동 라우팅 (이미 /api/v로 시작하면 그대로). main이 /api/* alias 유지 중이라 fail-safe.
     const routedEndpoint = (endpoint.indexOf('/api/') === 0 && endpoint.indexOf('/api/v') !== 0)
