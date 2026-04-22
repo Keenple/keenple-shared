@@ -182,7 +182,9 @@ function createMultiplayerServer(io, options = {}) {
     room.disconnectTimers.forEach(t => clearTimeout(t));
 
     rooms.delete(code);
-    console.log(`[MP] Room destroyed: ${code} (${reason})`);
+    const flags = `${room.matched ? '[MATCHED]' : ''}${room.gameStarted ? '[STARTED]' : ''}`;
+    const ageMs = Date.now() - room.createdAt;
+    console.log(`[MP] Room destroyed: ${code} (${reason}) ${flags} ageMs=${ageMs} players=${room.players.length}`);
   }
 
   function scheduleRoomCleanup(code, delayMs = 300000) {
@@ -682,10 +684,19 @@ function createMultiplayerServer(io, options = {}) {
     });
 
     // 연결 끊김
-    socket.on('disconnect', () => {
+    socket.on('disconnect', (reason) => {
       if (!currentRoomCode || !playerId) return;
       const room = getRoom(currentRoomCode);
       if (!room) return;
+
+      // [진단] matched 룸 + 게임 시작 전 disconnect 추적 (matchmaking 실패 원인 분석용)
+      if (room.matched && !room.gameStarted) {
+        const ageMs = Date.now() - room.createdAt;
+        const self = room.players.find(p => p.id === playerId);
+        const peerCount = room.players.filter(p => p.id !== playerId && p.connected).length;
+        const transport = socket.conn && socket.conn.transport && socket.conn.transport.name;
+        console.log(`[MP] matched-room early disconnect: code=${currentRoomCode} role=${self && self.role} reason=${reason} ageMs=${ageMs} peerConnected=${peerCount} transport=${transport}`);
+      }
 
       const player = room.players.find(p => p.id === playerId);
       if (player) {
