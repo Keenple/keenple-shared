@@ -277,6 +277,29 @@ function createMultiplayerServer(io, options = {}) {
     const feeCharged = room._lastChargedFee || 0;
     if (feeCharged <= 0) return;
 
+    const w = getWallet();
+    if (!w) return;
+    const seq = room._startSeq || 1;
+
+    // 정산 마커 — sink/refund 모든 policy 에서 한 번 호출.
+    // main crash-refund cron 이 "정산 안 된 entry_fee" 로 오판하지 않도록
+    // amount=0 match_settled 거래 기록. idempotent.
+    const settleUserIds = room.players.map(p => p.keenpleUserId).filter(Boolean);
+    if (settleUserIds.length) {
+      try {
+        await w.settle({
+          userIds: settleUserIds,
+          gameId: gameId || 'unknown',
+          refType: 'room',
+          refId: room.code,
+          reason: (endData && endData.aborted) ? 'match_aborted' : 'game_finished',
+          idempotencyKey: 'settle-' + (gameId || 'unknown') + '-' + room.code + '-' + seq,
+        });
+      } catch (e) {
+        console.error('[MP] settle 에러:', e.message);
+      }
+    }
+
     let payouts = [];
     if (payoutPolicy === 'sink') {
       payouts = [];
@@ -292,10 +315,6 @@ function createMultiplayerServer(io, options = {}) {
     }
     if (!payouts.length) return;
 
-    const w = getWallet();
-    if (!w) return;
-
-    const seq = room._startSeq || 1;
     for (const po of payouts) {
       const p = room.players.find(pp => pp.role === po.role);
       if (!p || !p.keenpleUserId) continue;

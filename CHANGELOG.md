@@ -6,6 +6,32 @@
 
 ---
 
+## v2.29.0 (2026-04-23)
+
+### Added
+- **`wallet.settle()` + `processPayout` 자동 호출 — crash-refund cron 오환불 차단** — 매치 종료 시 `payoutPolicy` 와 무관하게 main `/api/internal/match/settle` 에 `match_settled` 마커(amount=0)를 1회 기록. main 커밋 `48995e3` (2026-04-20) 로 추가된 cron 제외 조건과 맞물려, cron 이 정상 종료된 방의 `entry_fee` 를 "정산 안 됨" 으로 오판해 환불하던 버그 차단.
+  - 배경: 4/20~22 DB 기준 `entry_fee` 78건 중 `match_settled` 0건, 환불률 100%. 원인은 `sink` / `refund-on-abort`(non-aborted) policy 에서 shared 가 wallet 거래를 아예 안 남기는 구조였기 때문.
+  - **`wallet-client.js`**: `settle({ userIds, gameId, refType, refId, reason?, idempotencyKey })` 추가. Idempotency-Key 를 헤더 + 바디 양쪽에 전달(main 스펙).
+  - **`server-mp.js` `processPayout`**: `feeCharged > 0` 확인 직후 payout loop **이전** 에 `wallet.settle` 1회 호출. 모든 payoutPolicy 에서 실행(통일성·안전). `idempotencyKey: 'settle-{gameId}-{room.code}-{startSeq}'` — rematch 마다 새 거래, 중복 호출은 main 이 무시.
+  - `reason` 은 `endData.aborted === true` 면 `'match_aborted'`, 아니면 `'game_finished'`.
+
+### Changed
+- `processPayout` 내부 `getWallet()` · `seq` 초기화 위치 앞당김 (settle · payout 공통 사용).
+
+### Breaking ⚠
+- (없음 — 순수 추가. settle 실패는 warn 만 찍고 payout 계속 진행. 구버전 main(`/api/internal/match/settle` 미존재)에서는 404 로 warn 만 남고 기존 refund/payout 흐름엔 영향 없음.)
+
+### 마이그레이션 메모
+- **shared 쓰는 모든 게임**: 업그레이드만 하면 자동 적용. 게임 측 코드 변경 불필요.
+- **환경변수**: `KEENPLE_MAIN_URL` 이 미설정이면 localhost:3100 기본값(+ warn). EC2 배포 환경에선 `.env` 에 명시 필수.
+- **검증**: 한 판 끝까지 둔 후 main DB `transactions` 에 `type='match_settled'` 거래가 player 수만큼 기록되고, 30분 뒤 crash-refund cron 이 해당 방을 건드리지 않는지 확인.
+
+### 설계 메모
+- "refund policy 에서는 이미 refund 거래가 cron 제외 조건을 충족하므로 settle 생략 가능" 이지만, **모든 policy 에서 항상 호출** 하는 편이 안전 (미래에 cron 조건이 refund 거래만 보지 않도록 바뀌어도 보호됨, 분기 누락 리스크 제로). idempotent 설계라 중복 비용도 없음.
+- settle 실패 시 payout 을 중단시키지 않음 — settle 은 마커일 뿐이고, 실제 재화 이동은 payout 이 담당. 둘의 독립성 유지.
+
+---
+
 ## v2.27.0 (2026-04-21)
 
 ### Added

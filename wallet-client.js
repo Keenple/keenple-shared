@@ -98,6 +98,21 @@ function refund(opts) {
   }, opts.idempotencyKey);
 }
 
+// 매치 정산 마커 (amount=0 거래). 환불·지급이 일어나지 않는 policy(sink 등)에서도
+// "이 매치는 정상 종료됨" 을 main 에 기록 → crash-refund cron 이 entry_fee 를
+// 환불 대상으로 오판하지 않도록 막는 용도. idempotent (같은 key 재호출 무시).
+// opts: { userIds:number[], gameId, refType, refId, reason?, idempotencyKey }
+function settle(opts) {
+  return postJson('/api/internal/match/settle', {
+    userIds: opts.userIds,
+    gameId: opts.gameId,
+    refType: opts.refType,
+    refId: opts.refId,
+    reason: opts.reason || 'game_finished',
+    idempotencyKey: opts.idempotencyKey,
+  }, opts.idempotencyKey);
+}
+
 // grant는 관리자 전용 (/api/admin/wallet/adjust). 게임 서버에서 충전 불가 (보안).
 // 테스트 시에는 관리자 계정으로 admin 페이지(https://keenple.com/admin/wallet.html)에서 수동 충전.
 
@@ -140,6 +155,7 @@ function syncCatalog(gameId, items) {
 module.exports = {
   spend: spend,
   refund: refund,
+  settle: settle,
   getInventory: getInventory,
   addInventory: addInventory,
   consumeInventory: consumeInventory,
